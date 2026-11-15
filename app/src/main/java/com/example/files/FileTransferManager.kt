@@ -169,6 +169,9 @@ class FileTransferManager(
                     )
                 }
             } finally {
+                pendingAcks.entries.filter { it.key.startsWith("${transfer.transferId}:") }.forEach {
+                    pendingAcks.remove(it.key)?.complete(false)
+                }
                 activeTransfers.remove(transfer.transferId)
             }
         }
@@ -176,13 +179,16 @@ class FileTransferManager(
 
     private suspend fun sendOfferAndChunks(transfer: FileTransferEntity, localFile: File) {
         val local = repository.ensureInitialized()
-        val peer = repository.getPeerById(transfer.peerId) ?: return
-        val completeAck = CompletableDeferred<Boolean>()
-        pendingAcks["${transfer.transferId}:complete"] = completeAck
+        val peer = repository.getPeerById(transfer.peerId) ?: run {
+            repository.upsertFileTransfer(transfer.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
+            return
+        }
         if (peer.agreementPublicKey.isBlank()) {
             repository.upsertFileTransfer(transfer.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
             return
         }
+        val completeAck = CompletableDeferred<Boolean>()
+        pendingAcks["${transfer.transferId}:complete"] = completeAck
 
         val offerJson = JSONObject().apply {
             put("kind", "OFFER")
