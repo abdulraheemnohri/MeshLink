@@ -89,6 +89,12 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|dataSync" />
+
+        <service
+            android:name="com.meshlink.transport.wifi_direct.MeshConnectionService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|dataSync" />
     </application>
 
 </manifest>
