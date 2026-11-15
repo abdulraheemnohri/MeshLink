@@ -56,7 +56,7 @@ object BleFrameCodec {
         private data class Pending(
             val frameCount: Int,
             val totalLength: Int,
-            val createdAt: Long,
+            var lastUpdatedAt: Long,
             val frames: Array<ByteArray?>
         )
 
@@ -78,10 +78,10 @@ object BleFrameCodec {
             if (chunk.isEmpty() || chunk.size > totalLength) return null
 
             val now = clock()
-            pending.entries.removeIf { now - it.value.createdAt > transferTimeoutMs }
+            pending.entries.removeIf { now - it.value.lastUpdatedAt > transferTimeoutMs }
             val transfer = pending[transferId] ?: run {
                 if (pending.size >= maxTransfers) {
-                    val oldest = pending.entries.minByOrNull { it.value.createdAt }?.key
+                    val oldest = pending.entries.minByOrNull { it.value.lastUpdatedAt }?.key
                     if (oldest != null) pending.remove(oldest)
                 }
                 Pending(count, totalLength, now, arrayOfNulls(count)).also {
@@ -94,6 +94,7 @@ object BleFrameCodec {
                 return null
             }
 
+            transfer.lastUpdatedAt = now
             val previous = transfer.frames[index]
             if (previous != null && !previous.contentEquals(chunk)) {
                 pending.remove(transferId)
