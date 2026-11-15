@@ -9,6 +9,15 @@
 5. Repository tests: message persistence, pending queue recovery, expiry cleanup and migration tests.
 6. Android instrumentation: runtime permissions, foreground service start/stop, Bluetooth and Wi-Fi capability absence, lifecycle recreation.
 
+## New reliability regression cases
+
+- BLE frame codec: out-of-order frames, incomplete transfers, duplicate frames, malformed headers, maximum size and transfer timeout refresh.
+- Wi-Fi Aware: callback success/failure, callback timeout, stop while sends are pending, peer-handle loss and fragmented packet reassembly.
+- TCP transport: reject non-private IPv4 peers, reject oversized frames, return a negative acceptance byte for malformed packets and positive acceptance only after packet decoding.
+- File transfer: receiver ACK for offer/chunks, no local completion on transport-write alone, pause/resume from incomplete chunks, duplicate chunk idempotency, invalid chunk index, path traversal filenames, zero-byte files, final size mismatch and final SHA-256 mismatch.
+- Peer identity: reject unsigned handshakes, reject changed keys for an existing identity and reject non-handshake packets from unknown peers.
+- Spray-and-Wait: verify that the durable queue stores only the remaining copy budget after spraying.
+
 ## Test invariants
 
 - No untrusted packet can allocate memory based on an unchecked length field.
