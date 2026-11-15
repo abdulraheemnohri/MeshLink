@@ -739,6 +739,7 @@ class MeshRoutingEngine(
                 )
                 return
             }
+            val needsReply = senderPeer == null || senderPeer.signingPublicKey.isBlank()
             repository.upsertDiscoveredPeer(
                 deviceId = packet.senderId,
                 alias = alias,
@@ -746,9 +747,29 @@ class MeshRoutingEngine(
                 agreementPublicKey = kx,
                 transport = transportType.name,
                 address = remoteAddress,
-                port = LanMeshTransportPortHolder.TCP_PORT,
+                port = if (transportType == TransportType.LOCAL_LAN || transportType == TransportType.WIFI_DIRECT) {
+                    LanMeshTransportPortHolder.TCP_PORT
+                } else 0,
                 connected = true
             )
+            val handshakeEndpoint = DiscoveredEndpoint(
+                deviceId = packet.senderId,
+                alias = alias,
+                signingPublicKey = sig,
+                agreementPublicKey = kx,
+                transportType = transportType,
+                address = remoteAddress,
+                port = if (transportType == TransportType.LOCAL_LAN || transportType == TransportType.WIFI_DIRECT) {
+                    LanMeshTransportPortHolder.TCP_PORT
+                } else 0,
+                rssiDbm = -60
+            )
+            activeEndpoints[packet.senderId] = handshakeEndpoint
+            if (needsReply) {
+                // Complete the handshake in both directions so each side learns the other's
+                // stable application identity, not only a transport-level MAC address.
+                sendHandshake(handshakeEndpoint)
+            }
             return
         }
 
