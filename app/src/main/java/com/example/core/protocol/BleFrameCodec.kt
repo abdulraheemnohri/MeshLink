@@ -81,7 +81,7 @@ object BleFrameCodec {
 
             if (count !in 1..MAX_FRAMES || index !in 0 until count) return null
             if (totalLength !in 1..MAX_PACKET_BYTES) return null
-            if (chunk.isEmpty() || chunk.size > totalLength || crc32(chunk) != expectedCrc) return null
+            if (chunk.isEmpty() || chunk.size > totalLength || BleFrameCodec.crc32(chunk) != expectedCrc) return null
 
             val now = clock()
             pending.entries.removeIf { now - it.value.lastUpdatedAt > transferTimeoutMs }
