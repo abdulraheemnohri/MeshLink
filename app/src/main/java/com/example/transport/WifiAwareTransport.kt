@@ -171,6 +171,21 @@ class WifiAwareTransport(
             override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
                 handleIncomingBytes(peerHandle, message)
             }
+
+            override fun onMessageSendSucceeded(messageId: Int) {
+                pendingSends.remove(messageId)?.complete(true)
+            }
+
+            override fun onMessageSendFailed(messageId: Int, reason: Int) {
+                pendingSends.remove(messageId)?.complete(false)
+                _events.tryEmit(
+                    TransportEvent.Log(
+                        transportType = TransportType.WIFI_AWARE,
+                        eventType = "AWARE_TX_ERR",
+                        message = "Wi-Fi Aware frame send failed (reason $reason)"
+                    )
+                )
+            }
         }, handler)
     }
 
@@ -237,6 +252,9 @@ class WifiAwareTransport(
     }
 
     companion object {
+        // Keep each message below the Android Wi-Fi Aware message payload ceiling.
+        private const val AWARE_FRAME_BYTES = 255
+        private const val SEND_TIMEOUT_MS = 8_000L
         private const val SERVICE_NAME = "meshlink_aware"
     }
 }
