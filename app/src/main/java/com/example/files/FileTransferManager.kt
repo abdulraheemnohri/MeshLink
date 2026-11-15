@@ -58,6 +58,7 @@ class FileTransferManager(
             }
         }
         fileName = fileName.substringAfterLast('/').substringAfterLast('\\').filter { it.code >= 32 && it != '/' && it != '\\' }.take(120).ifBlank { "received_file" }
+        if (fileSize > MAX_FILE_BYTES) return null
         val mimeType = resolver.getType(uri) ?: "application/octet-stream"
 
         // Copy to app-private cache so resumable chunk reads survive URI permission expiration
@@ -71,6 +72,10 @@ class FileTransferManager(
                 val buf = ByteArray(16384)
                 var read: Int
                 while (input.read(buf).also { read = it } != -1) {
+                    if (localFile.length() + read > MAX_FILE_BYTES) {
+                        localFile.delete()
+                        return null
+                    }
                     output.write(buf, 0, read)
                     shaDigest.update(buf, 0, read)
                 }
@@ -420,8 +425,7 @@ class FileTransferManager(
     }
 
     private fun buildChunkRecords(transferId: String, file: File): List<FileChunkEntity> {
-        val bytes = file.readBytes()
-        if (bytes.isEmpty()) {
+        if (file.length() == 0L) {
             return listOf(
                 FileChunkEntity(
                     transferId = transferId,
@@ -434,21 +438,25 @@ class FileTransferManager(
             )
         }
         val list = mutableListOf<FileChunkEntity>()
-        var offset = 0
-        var idx = 0
-        while (offset < bytes.size) {
-            val len = minOf(CHUNK_SIZE, bytes.size - offset)
-            val slice = bytes.copyOfRange(offset, offset + len)
-            list += FileChunkEntity(
-                transferId = transferId,
-                chunkIndex = idx,
-                byteOffset = offset.toLong(),
-                byteLength = len,
-                chunkSha256 = crypto.sha256Hex(slice),
-                completed = false
-            )
-            offset += len
-            idx++
+        RandomAccessFile(file, "r").use { source ->
+            var offset = 0L
+            var index = 0
+            while (offset < source.length()) {
+                val length = minOf(CHUNK_SIZE.toLong(), source.length() - offset).toInt()
+                val bytes = ByteArray(length)
+                source.seek(offset)
+                source.readFully(bytes)
+                list += FileChunkEntity(
+                    transferId = transferId,
+                    chunkIndex = index,
+                    byteOffset = offset,
+                    byteLength = length,
+                    chunkSha256 = crypto.sha256Hex(bytes),
+                    completed = false
+                )
+                offset += length
+                index++
+            }
         }
         return list
     }
