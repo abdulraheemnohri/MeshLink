@@ -4,17 +4,18 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.CRC32
 
 /**
  * Application-level framing for BLE GATT characteristic writes.
  *
- * Each frame has a 14-byte header: magic(2), transferId(4), index(2),
- * frameCount(2), totalLength(4). A transfer is accepted only when every
+ * Each frame has an 18-byte header: magic(2), transferId(4), index(2),
+ * frameCount(2), totalLength(4), chunk CRC32(4). A transfer is accepted only when every
  * frame is present and the reconstructed size matches totalLength.
  */
 object BleFrameCodec {
     private const val MAGIC: Short = 0x4D4C
-    private const val HEADER_BYTES = 14
+    private const val HEADER_BYTES = 18
     const val MAX_PACKET_BYTES = 256 * 1024
     const val MAX_FRAMES = 2048
 
@@ -43,10 +44,14 @@ object BleFrameCodec {
                 .putShort(index.toShort())
                 .putShort(count.toShort())
                 .putInt(payload.size)
+                .putInt(crc32(chunk))
                 .put(chunk)
                 .array()
         }
     }
+
+    private fun crc32(bytes: ByteArray): Long =
+        CRC32().apply { update(bytes) }.value
 
     class Reassembler(
         private val maxTransfers: Int = 8,
@@ -71,11 +76,12 @@ object BleFrameCodec {
             val index = input.short.toInt() and 0xFFFF
             val count = input.short.toInt() and 0xFFFF
             val totalLength = input.int
+            val expectedCrc = input.int.toLong() and 0xFFFFFFFFL
             val chunk = ByteArray(input.remaining()).also(input::get)
 
             if (count !in 1..MAX_FRAMES || index !in 0 until count) return null
             if (totalLength !in 1..MAX_PACKET_BYTES) return null
-            if (chunk.isEmpty() || chunk.size > totalLength) return null
+            if (chunk.isEmpty() || chunk.size > totalLength || crc32(chunk) != expectedCrc) return null
 
             val now = clock()
             pending.entries.removeIf { now - it.value.lastUpdatedAt > transferTimeoutMs }
