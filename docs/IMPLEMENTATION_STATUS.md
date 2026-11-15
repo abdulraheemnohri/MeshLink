@@ -2,6 +2,20 @@
 
 This document separates implemented source code from capabilities that have been verified on real Android devices. A class or UI screen is not evidence that a transport or mesh route works end to end.
 
+## Latest source-level implementation (not yet device-verified)
+
+| Area | Current source state | Remaining verification / limitation |
+|---|---|---|
+| BLE | MTU-aware GATT writes, bounded application fragmentation/reassembly, sequential write callbacks and codec unit tests | Retry policy, peripheral/central role coverage, real-device throughput and long-transfer stability |
+| Wi-Fi Aware | Bounded fragmentation/reassembly and per-frame framework send callbacks | Framework send success is not remote application delivery; test NAN availability, peer-handle lifecycle and packet-level ACK behavior on supported devices |
+| Wi-Fi Direct | Group-owner/client role tracking; best-effort client IP lookup from ARP; TCP acceptance response through the LAN listener | ARP access and DHCP mapping are OEM-dependent; prove both directions on physical phones |
+| Local LAN | Length-bounded TCP frames, socket timeouts, private-IPv4 peer filtering and receiver acceptance byte | Validate interface routing on Wi-Fi, hotspot and Wi-Fi Direct; add rate limiting and multi-interface testing |
+| File transfer | Chunk hashes, receiver chunk ACKs, resumable incomplete-chunk reads, final size/SHA-256 verification, bounded file size and sanitized names | Automated integration tests, restart tests, duplicate/reordered chunk tests and two-device validation |
+| Peer identity | Signed first handshake, trust-on-first-use key consistency checks, unknown non-handshake packet rejection and bidirectional endpoint mapping | QR fingerprint verification remains necessary to authenticate identity out of band; static ECDH is not forward-secret |
+| Routing | Bounded in-memory replay cache, expiry pruning, persisted remaining Spray-and-Wait budget and route-aware queue flushing | Cache is not durable across process restart; physical three-node relay tests and queue policy tests remain required |
+
+These entries describe source changes only. They do not mean the corresponding radio path has passed a physical-device acceptance test.
+
 ## Current engineering priorities
 
 1. Reproducible Android builds and CI.

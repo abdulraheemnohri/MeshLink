@@ -12,14 +12,17 @@ import com.example.data.entities.FileChunkEntity
 import com.example.data.entities.FileTransferEntity
 import com.example.data.repository.MeshRepository
 import com.example.routing.MeshRoutingEngine
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -32,11 +35,24 @@ class FileTransferManager(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pausedTransfers = ConcurrentHashMap<String, Boolean>()
+    private val pendingAcks = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+    private val activeTransfers = ConcurrentHashMap.newKeySet<String>()
 
     init {
         scope.launch {
             routingEngine.incomingFilePacket.collect { incoming ->
-                handleIncomingFilePacket(incoming.packet.senderId, incoming.payloadJson)
+                try {
+                    handleIncomingFilePacket(incoming.packet.senderId, incoming.payloadJson)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    repository.logNetworkEvent(
+                        transportType = incoming.packet.packetType.name,
+                        eventType = "FILE_RX_ERR",
+                        peerId = incoming.packet.senderId,
+                        summary = "Rejected file-transfer packet after processing error: ${error.message}"
+                    )
+                }
             }
         }
     }
@@ -54,6 +70,8 @@ class FileTransferManager(
                 if (sizeIdx >= 0) fileSize = cursor.getLong(sizeIdx)
             }
         }
+        fileName = fileName.substringAfterLast('/').substringAfterLast('\\').filter { it.code >= 32 && it != '/' && it != '\\' }.take(120).ifBlank { "received_file" }
+        if (fileSize > MAX_FILE_BYTES) return null
         val mimeType = resolver.getType(uri) ?: "application/octet-stream"
 
         // Copy to app-private cache so resumable chunk reads survive URI permission expiration
@@ -67,6 +85,10 @@ class FileTransferManager(
                 val buf = ByteArray(16384)
                 var read: Int
                 while (input.read(buf).also { read = it } != -1) {
+                    if (localFile.length() + read > MAX_FILE_BYTES) {
+                        localFile.delete()
+                        return null
+                    }
                     output.write(buf, 0, read)
                     shaDigest.update(buf, 0, read)
                 }
@@ -74,6 +96,10 @@ class FileTransferManager(
         } ?: return null
 
         val actualSize = localFile.length()
+        if (actualSize > MAX_FILE_BYTES) {
+            localFile.delete()
+            return null
+        }
         if (fileSize <= 0L) fileSize = actualSize
         val fullSha256 = shaDigest.digest().joinToString("") { "%02x".format(it) }
         val totalChunks = ((actualSize + CHUNK_SIZE - 1) / CHUNK_SIZE).toInt().coerceAtLeast(1)
@@ -99,14 +125,15 @@ class FileTransferManager(
         val chunks = buildChunkRecords(transferId, localFile)
         repository.insertFileChunks(chunks)
 
-        scope.launch {
-            sendOfferAndChunks(transfer, localFile)
-        }
+        launchOutgoingTransfer(transfer, localFile)
         return transfer
     }
 
     suspend fun pauseTransfer(transferId: String) {
         pausedTransfers[transferId] = true
+        pendingAcks.entries.filter { it.key.startsWith("$transferId:") }.forEach {
+            pendingAcks.remove(it.key)?.complete(false)
+        }
         val existing = repository.getFileTransferById(transferId) ?: return
         repository.upsertFileTransfer(
             existing.copy(status = "PAUSED", updatedAt = System.currentTimeMillis())
@@ -115,6 +142,9 @@ class FileTransferManager(
 
     suspend fun resumeTransfer(transferId: String) {
         pausedTransfers[transferId] = false
+        pendingAcks.entries.filter { it.key.startsWith("$transferId:") }.forEach {
+            pendingAcks.remove(it.key)?.complete(false)
+        }
         val existing = repository.getFileTransferById(transferId) ?: return
         val file = File(existing.localUriOrPath)
         if (!file.exists()) {
@@ -126,18 +156,50 @@ class FileTransferManager(
         repository.upsertFileTransfer(
             existing.copy(status = "TRANSFERRING", updatedAt = System.currentTimeMillis())
         )
+        launchOutgoingTransfer(existing, file)
+    }
+
+    private fun launchOutgoingTransfer(transfer: FileTransferEntity, file: File) {
         scope.launch {
-            sendOfferAndChunks(existing, file)
+            if (!activeTransfers.add(transfer.transferId)) return@launch
+            try {
+                sendOfferAndChunks(transfer, file)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                repository.logNetworkEvent(
+                    transportType = transfer.transportType,
+                    eventType = "FILE_TX_ERR",
+                    peerId = transfer.peerId,
+                    summary = "File transfer ${transfer.transferId} paused after an error: ${error.message}"
+                )
+                val current = repository.getFileTransferById(transfer.transferId) ?: transfer
+                if (current.status != "VERIFIED") {
+                    repository.upsertFileTransfer(
+                        current.copy(status = "PAUSED", updatedAt = System.currentTimeMillis())
+                    )
+                }
+            } finally {
+                pendingAcks.entries.filter { it.key.startsWith("${transfer.transferId}:") }.forEach {
+                    pendingAcks.remove(it.key)?.complete(false)
+                }
+                activeTransfers.remove(transfer.transferId)
+            }
         }
     }
 
     private suspend fun sendOfferAndChunks(transfer: FileTransferEntity, localFile: File) {
         val local = repository.ensureInitialized()
-        val peer = repository.getPeerById(transfer.peerId) ?: return
+        val peer = repository.getPeerById(transfer.peerId) ?: run {
+            repository.upsertFileTransfer(transfer.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
+            return
+        }
         if (peer.agreementPublicKey.isBlank()) {
             repository.upsertFileTransfer(transfer.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
             return
         }
+        val completeAck = CompletableDeferred<Boolean>()
+        pendingAcks["${transfer.transferId}:complete"] = completeAck
 
         val offerJson = JSONObject().apply {
             put("kind", "OFFER")
@@ -159,42 +221,83 @@ class FileTransferManager(
                 visitedPeers = listOf(local.deviceId)
             )
         )
+        val offerAck = CompletableDeferred<Boolean>()
+        pendingAcks["${transfer.transferId}:offer"] = offerAck
         routingEngine.sendRawSignedPacket(offerPacket)
+        if (withTimeoutOrNull(ACK_TIMEOUT_MS) { offerAck.await() } != true) {
+            pendingAcks.remove("${transfer.transferId}:offer")
+            val current = repository.getFileTransferById(transfer.transferId) ?: transfer
+            if (current.status != "FAILED") {
+                repository.upsertFileTransfer(current.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
+            }
+            return
+        }
 
         val remainingChunks = repository.getIncompleteChunks(transfer.transferId)
-        val fileBytes = localFile.readBytes()
-        var completed = transfer.totalChunks - remainingChunks.size
+        val completed = transfer.totalChunks - remainingChunks.size
+        RandomAccessFile(localFile, "r").use { source ->
+            for (chunk in remainingChunks) {
+                if (pausedTransfers[transfer.transferId] == true) return
+                if (chunk.byteOffset < 0L || chunk.byteLength < 0 || chunk.byteOffset + chunk.byteLength > localFile.length()) {
+                    repository.upsertFileTransfer(transfer.copy(status = "FAILED", updatedAt = System.currentTimeMillis()))
+                    return
+                }
+                val slice = ByteArray(chunk.byteLength)
+                source.seek(chunk.byteOffset)
+                source.readFully(slice)
+                if (crypto.sha256Hex(slice) != chunk.chunkSha256) {
+                    repository.logSecurityEvent(
+                        eventType = "LOCAL_CHUNK_HASH_FAIL",
+                        peerId = transfer.peerId,
+                        severity = "ALERT",
+                        summary = "Local source chunk ${chunk.chunkIndex} changed during transfer"
+                    )
+                    repository.upsertFileTransfer(transfer.copy(status = "FAILED", updatedAt = System.currentTimeMillis()))
+                    return
+                }
+                val chunkJson = JSONObject().apply {
+                    put("kind", "CHUNK")
+                    put("transferId", transfer.transferId)
+                    put("index", chunk.chunkIndex)
+                    put("chunkSha256", chunk.chunkSha256)
+                    put("data", Base64.encodeToString(slice, Base64.NO_WRAP))
+                }.toString()
 
-        for (chunk in remainingChunks) {
-            if (pausedTransfers[transfer.transferId] == true) return
-            val end = (chunk.byteOffset.toInt() + chunk.byteLength).coerceAtMost(fileBytes.size)
-            val slice = fileBytes.copyOfRange(chunk.byteOffset.toInt(), end)
-            val chunkJson = JSONObject().apply {
-                put("kind", "CHUNK")
-                put("transferId", transfer.transferId)
-                put("index", chunk.chunkIndex)
-                put("chunkSha256", chunk.chunkSha256)
-                put("data", Base64.encodeToString(slice, Base64.NO_WRAP))
-            }.toString()
-
-            val chunkPacket = crypto.signPacket(
-                MeshPacket(
-                    senderId = local.deviceId,
-                    destinationId = transfer.peerId,
-                    packetType = PacketType.FILE_CHUNK,
-                    routingStrategy = RoutingStrategy.STORE_AND_FORWARD,
-                    encryptedPayload = crypto.encryptForPeer(chunkJson, peer.agreementPublicKey, peer.ratchetCounter),
-                    visitedPeers = listOf(local.deviceId)
+                val chunkPacket = crypto.signPacket(
+                    MeshPacket(
+                        senderId = local.deviceId,
+                        destinationId = transfer.peerId,
+                        packetType = PacketType.FILE_CHUNK,
+                        routingStrategy = RoutingStrategy.STORE_AND_FORWARD,
+                        encryptedPayload = crypto.encryptForPeer(chunkJson, peer.agreementPublicKey, peer.ratchetCounter),
+                        visitedPeers = listOf(local.deviceId)
+                    )
                 )
-            )
-            routingEngine.sendRawSignedPacket(chunkPacket)
-            repository.markChunkCompleted(transfer.transferId, chunk.chunkIndex)
-            completed++
-            val status = if (completed >= transfer.totalChunks) "VERIFIED" else "TRANSFERRING"
+                val ackKey = "${transfer.transferId}:${chunk.chunkIndex}"
+                val ack = CompletableDeferred<Boolean>()
+                pendingAcks[ackKey] = ack
+                routingEngine.sendRawSignedPacket(chunkPacket)
+                if (withTimeoutOrNull(ACK_TIMEOUT_MS) { ack.await() } != true) {
+                    pendingAcks.remove(ackKey)
+                    repository.upsertFileTransfer(
+                        transfer.copy(
+                            completedChunks = transfer.totalChunks - repository.getIncompleteChunks(transfer.transferId).size,
+                            status = "PAUSED",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                    return
+                }
+            }
+        }
+
+        val finalResult = withTimeoutOrNull(COMPLETE_TIMEOUT_MS) { completeAck.await() }
+        if (finalResult != true) {
+            pendingAcks.remove("${transfer.transferId}:complete")
+            val current = repository.getFileTransferById(transfer.transferId) ?: transfer
             repository.upsertFileTransfer(
-                transfer.copy(
-                    completedChunks = completed,
-                    status = status,
+                current.copy(
+                    status = if (finalResult == false) "FAILED" else "TRANSFERRING",
                     updatedAt = System.currentTimeMillis()
                 )
             )
@@ -204,37 +307,102 @@ class FileTransferManager(
     private suspend fun handleIncomingFilePacket(senderId: String, payload: JSONObject) {
         val kind = payload.optString("kind")
         val transferId = payload.optString("transferId")
-        if (transferId.isBlank()) return
+        if (!transferId.matches(Regex("[A-Za-z0-9_-]{1,96}"))) return
+
+        if (kind == "ACK") {
+            val transfer = repository.getFileTransferById(transferId) ?: return
+            if (!transfer.isOutgoing || transfer.peerId != senderId) return
+            val index = payload.optInt("index", Int.MIN_VALUE)
+            when (index) {
+                -2 -> {
+                    repository.upsertFileTransfer(
+                        transfer.copy(status = "VERIFIED", completedChunks = transfer.totalChunks, updatedAt = System.currentTimeMillis())
+                    )
+                    pendingAcks.remove("$transferId:complete")?.complete(true)
+                }
+                -1 -> pendingAcks.remove("$transferId:offer")?.complete(true)
+                -3 -> {
+                    repository.upsertFileTransfer(
+                        transfer.copy(status = "FAILED", updatedAt = System.currentTimeMillis())
+                    )
+                    pendingAcks.remove("$transferId:offer")?.complete(false)
+                    pendingAcks.remove("$transferId:complete")?.complete(false)
+                }
+                else -> if (index in 0 until transfer.totalChunks) {
+                    repository.markChunkCompleted(transferId, index)
+                    val remaining = repository.getIncompleteChunks(transferId).size
+                    repository.upsertFileTransfer(
+                        transfer.copy(
+                            completedChunks = transfer.totalChunks - remaining,
+                            status = "TRANSFERRING",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                    pendingAcks.remove("$transferId:$index")?.complete(true)
+                }
+            }
+            return
+        }
 
         if (kind == "OFFER") {
             val peer = repository.getPeerById(senderId)
+            val totalBytes = payload.optLong("totalBytes", -1L)
+            val totalChunks = payload.optInt("totalChunks", -1)
+            val expectedHash = payload.optString("sha256", "")
+            if (totalBytes !in 0..MAX_FILE_BYTES || totalChunks !in 1..MAX_CHUNKS ||
+                totalChunks != ((totalBytes + CHUNK_SIZE - 1) / CHUNK_SIZE).toInt().coerceAtLeast(1) ||
+                !expectedHash.matches(Regex("[a-fA-F0-9]{64}")) || peer?.agreementPublicKey.isNullOrBlank()
+            ) return
+            val safeName = payload.optString("fileName", "received_file")
+                .substringAfterLast('/').substringAfterLast('\\')
+                .filter { it.code >= 32 && it != '/' && it != '\\' }
+                .take(120).ifBlank { "received_file" }
             val dir = File(context.filesDir, "mesh_received").apply { mkdirs() }
-            val fileName = payload.optString("fileName", "received_file")
-            val destFile = File(dir, "${transferId}_$fileName")
-            val totalChunks = payload.optInt("totalChunks", 1)
+            val destFile = File(dir, "${transferId}_$safeName")
             val transfer = FileTransferEntity(
                 transferId = transferId,
                 peerId = senderId,
                 peerAlias = peer?.alias ?: senderId,
-                fileName = fileName,
+                fileName = safeName,
                 mimeType = payload.optString("mimeType", "application/octet-stream"),
                 localUriOrPath = destFile.absolutePath,
-                totalBytes = payload.optLong("totalBytes", 0L),
+                totalBytes = totalBytes,
                 totalChunks = totalChunks,
                 completedChunks = 0,
-                sha256 = payload.optString("sha256", ""),
+                sha256 = expectedHash.lowercase(),
                 isOutgoing = false,
                 status = "TRANSFERRING"
             )
+            val existing = repository.getFileTransferById(transferId)
+            if (existing != null) {
+                if (existing.isOutgoing || existing.peerId != senderId ||
+                    existing.totalBytes != totalBytes || existing.totalChunks != totalChunks ||
+                    !existing.sha256.equals(expectedHash, true)
+                ) return
+                when (existing.status) {
+                    "VERIFIED" -> {
+                        sendFileAck(senderId, transferId, -1)
+                        sendFileAck(senderId, transferId, -2)
+                    }
+                    "FAILED" -> sendFileAck(senderId, transferId, -3)
+                    else -> sendFileAck(senderId, transferId, -1)
+                }
+                return
+            }
             repository.upsertFileTransfer(transfer)
+            sendFileAck(senderId, transferId, -1)
         } else if (kind == "CHUNK") {
             val transfer = repository.getFileTransferById(transferId) ?: return
+            if (transfer.isOutgoing || transfer.peerId != senderId || transfer.status !in setOf("TRANSFERRING", "PAUSED")) return
             val index = payload.optInt("index", -1)
             val expectedChunkSha = payload.optString("chunkSha256", "")
             val dataB64 = payload.optString("data", "")
-            if (index < 0 || dataB64.isBlank()) return
+            if (index !in 0 until transfer.totalChunks || dataB64.length > MAX_ENCODED_CHUNK) return
 
-            val bytes = Base64.decode(dataB64, Base64.NO_WRAP)
+            val expectedLength = minOf(CHUNK_SIZE.toLong(), (transfer.totalBytes - index.toLong() * CHUNK_SIZE).coerceAtLeast(0L)).toInt()
+            if (expectedLength > 0 && dataB64.isBlank()) return
+            val bytes = runCatching { Base64.decode(dataB64, Base64.NO_WRAP) }.getOrNull() ?: return
+            if (bytes.size != expectedLength || expectedChunkSha.length != 64) return
             if (expectedChunkSha.isNotBlank() && crypto.sha256Hex(bytes) != expectedChunkSha) {
                 repository.logSecurityEvent(
                     eventType = "CHUNK_HASH_FAIL",
@@ -246,19 +414,41 @@ class FileTransferManager(
             }
 
             val chunkDir = File(context.filesDir, "mesh_chunks/$transferId").apply { mkdirs() }
-            File(chunkDir, "chunk_%05d.part".format(index)).writeBytes(bytes)
+            val partFile = File(chunkDir, "chunk_%05d.part".format(index))
+            val tempFile = File(chunkDir, "chunk_%05d.tmp".format(index))
+            tempFile.writeBytes(bytes)
+            if (partFile.exists()) partFile.delete()
+            if (!tempFile.renameTo(partFile)) {
+                tempFile.delete()
+                return
+            }
 
-            val receivedParts = chunkDir.listFiles()?.size ?: 0
+            val receivedParts = (0 until transfer.totalChunks).count {
+                File(chunkDir, "chunk_%05d.part".format(it)).isFile
+            }
+            sendFileAck(senderId, transferId, index)
             if (receivedParts >= transfer.totalChunks) {
                 val outFile = File(transfer.localUriOrPath)
-                val outStream = ByteArrayOutputStream()
-                for (i in 0 until transfer.totalChunks) {
-                    val part = File(chunkDir, "chunk_%05d.part".format(i))
-                    if (part.exists()) outStream.write(part.readBytes())
+                val outStream = FileOutputStream(outFile)
+                val digest = MessageDigest.getInstance("SHA-256")
+                var assembledBytes = 0L
+                outStream.use { output ->
+                    for (i in 0 until transfer.totalChunks) {
+                        val part = File(chunkDir, "chunk_%05d.part".format(i))
+                        if (!part.isFile) return
+                        part.inputStream().use { input ->
+                            val buffer = ByteArray(16 * 1024)
+                            var count: Int
+                            while (input.read(buffer).also { count = it } != -1) {
+                                output.write(buffer, 0, count)
+                                digest.update(buffer, 0, count)
+                                assembledBytes += count
+                            }
+                        }
+                    }
                 }
-                val assembled = outStream.toByteArray()
-                outFile.writeBytes(assembled)
-                val verified = transfer.sha256.isBlank() || crypto.sha256Hex(assembled) == transfer.sha256
+                val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+                val verified = assembledBytes == transfer.totalBytes && actualHash.equals(transfer.sha256, true)
                 repository.upsertFileTransfer(
                     transfer.copy(
                         completedChunks = transfer.totalChunks,
@@ -266,6 +456,16 @@ class FileTransferManager(
                         updatedAt = System.currentTimeMillis()
                     )
                 )
+                if (verified) sendFileAck(senderId, transferId, -2)
+                else {
+                    sendFileAck(senderId, transferId, -3)
+                    repository.logSecurityEvent(
+                    eventType = "FILE_HASH_FAIL",
+                    peerId = senderId,
+                    severity = "ALERT",
+                    summary = "Final file size/hash verification failed for $transferId"
+                    )
+                }
             } else {
                 repository.upsertFileTransfer(
                     transfer.copy(
@@ -278,9 +478,31 @@ class FileTransferManager(
         }
     }
 
+    private suspend fun sendFileAck(destinationId: String, transferId: String, index: Int) {
+        val local = repository.ensureInitialized()
+        val peer = repository.getPeerById(destinationId) ?: return
+        if (peer.agreementPublicKey.isBlank()) return
+        val body = JSONObject().apply {
+            put("kind", "ACK")
+            put("transferId", transferId)
+            put("index", index)
+        }.toString()
+        val packet = crypto.signPacket(
+            MeshPacket(
+                senderId = local.deviceId,
+                destinationId = destinationId,
+                packetType = PacketType.FILE_CHUNK,
+                routingStrategy = RoutingStrategy.DIRECT,
+                encryptedPayload = crypto.encryptForPeer(body, peer.agreementPublicKey, peer.ratchetCounter),
+                visitedPeers = listOf(local.deviceId),
+                priority = MeshPacket.PRIORITY_HIGH
+            )
+        )
+        routingEngine.sendRawSignedPacket(packet)
+    }
+
     private fun buildChunkRecords(transferId: String, file: File): List<FileChunkEntity> {
-        val bytes = file.readBytes()
-        if (bytes.isEmpty()) {
+        if (file.length() == 0L) {
             return listOf(
                 FileChunkEntity(
                     transferId = transferId,
@@ -293,26 +515,35 @@ class FileTransferManager(
             )
         }
         val list = mutableListOf<FileChunkEntity>()
-        var offset = 0
-        var idx = 0
-        while (offset < bytes.size) {
-            val len = minOf(CHUNK_SIZE, bytes.size - offset)
-            val slice = bytes.copyOfRange(offset, offset + len)
-            list += FileChunkEntity(
-                transferId = transferId,
-                chunkIndex = idx,
-                byteOffset = offset.toLong(),
-                byteLength = len,
-                chunkSha256 = crypto.sha256Hex(slice),
-                completed = false
-            )
-            offset += len
-            idx++
+        RandomAccessFile(file, "r").use { source ->
+            var offset = 0L
+            var index = 0
+            while (offset < source.length()) {
+                val length = minOf(CHUNK_SIZE.toLong(), source.length() - offset).toInt()
+                val bytes = ByteArray(length)
+                source.seek(offset)
+                source.readFully(bytes)
+                list += FileChunkEntity(
+                    transferId = transferId,
+                    chunkIndex = index,
+                    byteOffset = offset,
+                    byteLength = length,
+                    chunkSha256 = crypto.sha256Hex(bytes),
+                    completed = false
+                )
+                offset += length
+                index++
+            }
         }
         return list
     }
 
     companion object {
         private const val CHUNK_SIZE = 32 * 1024
+        private const val MAX_FILE_BYTES = 256L * 1024L * 1024L
+        private const val MAX_CHUNKS = 8192
+        private const val MAX_ENCODED_CHUNK = ((CHUNK_SIZE + 2) / 3) * 4 + 16
+        private const val ACK_TIMEOUT_MS = 45_000L
+        private const val COMPLETE_TIMEOUT_MS = 120_000L
     }
 }

@@ -70,6 +70,7 @@ class MeshProtocolTest {
             encryptedPayload = "{}"
         )
         assertFalse(active.isExpired(now + 5_000L))
+        assertTrue(active.isExpired(now + 10_000L))
         assertTrue(active.isExpired(now + 15_000L))
     }
 

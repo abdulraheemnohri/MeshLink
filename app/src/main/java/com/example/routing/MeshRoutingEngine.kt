@@ -468,7 +468,9 @@ class MeshRoutingEngine(
     }
 
     suspend fun dispatchPacket(packet: MeshPacket): Boolean {
-        seenPacketCache[packet.messageId] = packet.expiresAt
+        val now = System.currentTimeMillis()
+        if (packet.isExpired(now) || packet.hopLimit < 0) return false
+        rememberPacket(packet.messageId, packet.expiresAt, now)
         val directEndpoint = activeEndpoints[packet.destinationId]
 
         if (directEndpoint != null) {
@@ -499,7 +501,8 @@ class MeshRoutingEngine(
             }
         }
 
-        // Strategy-driven forwarding
+        // Strategy-driven forwarding. Persist the remaining spray budget, not the original budget.
+        var queuedPacket = packet
         when (packet.routingStrategy) {
             RoutingStrategy.EPIDEMIC -> {
                 var relayedCount = 0
@@ -523,6 +526,7 @@ class MeshRoutingEngine(
                         }
                     }
                     if (copiesLeft < packet.sprayCopies) {
+                        queuedPacket = packet.copy(sprayCopies = copiesLeft)
                         repository.updateMessageStatus(packet.messageId, "SPRAYED", null, packet.hopCount)
                     }
                 }
@@ -537,11 +541,11 @@ class MeshRoutingEngine(
                 destinationId = packet.destinationId,
                 packetType = packet.packetType.name,
                 routingStrategy = packet.routingStrategy.name,
-                rawPacketJson = MeshPacketCodec.encode(packet),
-                priority = packet.priority,
-                remainingSprayCopies = packet.sprayCopies,
-                hopLimit = packet.hopLimit,
-                expiresAt = packet.expiresAt
+                rawPacketJson = MeshPacketCodec.encode(queuedPacket),
+                priority = queuedPacket.priority,
+                remainingSprayCopies = queuedPacket.sprayCopies,
+                hopLimit = queuedPacket.hopLimit,
+                expiresAt = queuedPacket.expiresAt
             )
         )
         return false
@@ -563,14 +567,15 @@ class MeshRoutingEngine(
             }
 
             val direct = activeEndpoints[packet.destinationId]
-            if (direct != null && sendOverBestTransport(direct, packet)) {
+            val dispatched = dispatchPacket(packet)
+            if (dispatched) {
                 repository.removePendingPacket(entry.messageId)
                 repository.updateMessageStatus(entry.messageId, "RELAYED", null, packet.hopCount)
                 repository.logNetworkEvent(
-                    transportType = direct.transportType.name,
+                    transportType = direct?.transportType?.name ?: "DTN",
                     eventType = "DTN_FLUSH",
-                    peerId = direct.deviceId,
-                    summary = "Flushed queued DTN packet ${packet.messageId.take(8)} on reconnect"
+                    peerId = direct?.deviceId ?: packet.destinationId,
+                    summary = "Forwarded queued DTN packet ${packet.messageId.take(8)} after a route became available"
                 )
             }
         }
@@ -682,9 +687,10 @@ class MeshRoutingEngine(
         val local = repository.ensureInitialized()
         if (packet.senderId == local.deviceId) return
 
-        // Replay & duplicate suppression
+        // Replay & duplicate suppression. Expired entries are pruned and the cache is bounded.
         val now = System.currentTimeMillis()
         if (packet.isExpired(now)) return
+        pruneSeenPacketCache(now)
         if (seenPacketCache.containsKey(packet.messageId)) {
             repository.logSecurityEvent(
                 eventType = "REPLAY_DROP",
@@ -693,9 +699,6 @@ class MeshRoutingEngine(
             )
             return
         }
-        seenPacketCache[packet.messageId] = packet.expiresAt
-
-        // Check if sender is blocked
         val senderPeer = repository.getPeerById(packet.senderId)
         if (senderPeer?.blocked == true) {
             repository.logSecurityEvent(
@@ -707,25 +710,35 @@ class MeshRoutingEngine(
             return
         }
 
-        // Verify integrity hash & signature when sender key is known
-        if (senderPeer != null && senderPeer.signingPublicKey.isNotBlank()) {
-            if (!crypto.verifyPacketSignature(packet, senderPeer.signingPublicKey)) {
-                repository.logSecurityEvent(
-                    eventType = "SIG_FAIL",
-                    peerId = packet.senderId,
-                    severity = "ALERT",
-                    summary = "Signature/integrity verification failed for ${packet.messageId.take(8)}"
-                )
-                return
-            }
-        }
-
-        // Handshake packet
+        // The first packet from an unknown node must be a signed identity handshake.
         if (packet.packetType == PacketType.PEER_HANDSHAKE || packet.packetType == PacketType.HELLO) {
             val obj = runCatching { JSONObject(packet.encryptedPayload) }.getOrNull() ?: return
             val alias = obj.optString("alias", "Node-${packet.senderId.take(6)}")
             val sig = obj.optString("sig", "")
             val kx = obj.optString("kx", "")
+            if (sig.isBlank() || kx.isBlank() || !crypto.verifyPacketSignature(packet, sig)) {
+                repository.logSecurityEvent(
+                    eventType = "HANDSHAKE_REJECT",
+                    peerId = packet.senderId,
+                    severity = "ALERT",
+                    summary = "Rejected unsigned or invalid peer identity handshake"
+                )
+                return
+            }
+            if (senderPeer != null &&
+                ((senderPeer.signingPublicKey.isNotBlank() && senderPeer.signingPublicKey != sig) ||
+                 (senderPeer.agreementPublicKey.isNotBlank() && senderPeer.agreementPublicKey != kx))
+            ) {
+                repository.logSecurityEvent(
+                    eventType = "IDENTITY_KEY_CHANGE",
+                    peerId = packet.senderId,
+                    severity = "ALERT",
+                    summary = "Rejected unexpected public-key change for an existing peer"
+                )
+                return
+            }
+            rememberPacket(packet.messageId, packet.expiresAt, now)
+            val needsReply = senderPeer == null || senderPeer.signingPublicKey.isBlank()
             repository.upsertDiscoveredPeer(
                 deviceId = packet.senderId,
                 alias = alias,
@@ -733,11 +746,52 @@ class MeshRoutingEngine(
                 agreementPublicKey = kx,
                 transport = transportType.name,
                 address = remoteAddress,
-                port = LanMeshTransportPortHolder.TCP_PORT,
+                port = if (transportType == TransportType.LOCAL_LAN || transportType == TransportType.WIFI_DIRECT) {
+                    LanMeshTransportPortHolder.TCP_PORT
+                } else 0,
                 connected = true
+            )
+            val handshakeEndpoint = DiscoveredEndpoint(
+                deviceId = packet.senderId,
+                alias = alias,
+                signingPublicKey = sig,
+                agreementPublicKey = kx,
+                transportType = transportType,
+                address = remoteAddress,
+                port = if (transportType == TransportType.LOCAL_LAN || transportType == TransportType.WIFI_DIRECT) {
+                    LanMeshTransportPortHolder.TCP_PORT
+                } else 0,
+                rssiDbm = -60
+            )
+            activeEndpoints[packet.senderId] = handshakeEndpoint
+            if (needsReply) {
+                // Complete the handshake in both directions so each side learns the other's
+                // stable application identity, not only a transport-level MAC address.
+                sendHandshake(handshakeEndpoint)
+            }
+            return
+        }
+
+        // Never accept data or delivery acknowledgements from an unknown/unpinned key.
+        if (senderPeer == null || senderPeer.signingPublicKey.isBlank()) {
+            repository.logSecurityEvent(
+                eventType = "UNKNOWN_IDENTITY_DROP",
+                peerId = packet.senderId,
+                severity = "WARN",
+                summary = "Dropped non-handshake packet before peer identity was established"
             )
             return
         }
+        if (!crypto.verifyPacketSignature(packet, senderPeer.signingPublicKey)) {
+            repository.logSecurityEvent(
+                eventType = "SIG_FAIL",
+                peerId = packet.senderId,
+                severity = "ALERT",
+                summary = "Signature/integrity verification failed for ${packet.messageId.take(8)}"
+            )
+            return
+        }
+        rememberPacket(packet.messageId, packet.expiresAt, now)
 
         val isForLocal = packet.destinationId == local.deviceId ||
             packet.destinationId == MeshPacket.BROADCAST_ID
@@ -929,6 +983,7 @@ class MeshRoutingEngine(
                         deliveredAt = System.currentTimeMillis()
                     )
                 )
+                sendDeliveryAck(packet.senderId, packet.messageId)
             }
 
             PacketType.VOICE_PACKET -> {
@@ -998,6 +1053,22 @@ class MeshRoutingEngine(
         }
     }
 
+    @Synchronized
+    private fun pruneSeenPacketCache(now: Long) {
+        seenPacketCache.entries.removeIf { it.value <= now }
+        if (seenPacketCache.size > MAX_SEEN_PACKETS) {
+            val excess = seenPacketCache.size - MAX_SEEN_PACKETS
+            seenPacketCache.entries.sortedBy { it.value }.take(excess).forEach {
+                seenPacketCache.remove(it.key, it.value)
+            }
+        }
+    }
+
+    private fun rememberPacket(messageId: String, expiresAt: Long, now: Long = System.currentTimeMillis()) {
+        pruneSeenPacketCache(now)
+        if (expiresAt > now) seenPacketCache[messageId] = expiresAt
+    }
+
     private suspend fun sendDeliveryAck(destinationId: String, ackForMessageId: String) {
         val local = repository.ensureInitialized()
         val ackPayload = JSONObject().put("ackFor", ackForMessageId).toString()
@@ -1053,5 +1124,9 @@ class MeshRoutingEngine(
 
     private object LanMeshTransportPortHolder {
         const val TCP_PORT = 45821
+    }
+
+    companion object {
+        private const val MAX_SEEN_PACKETS = 10_000
     }
 }

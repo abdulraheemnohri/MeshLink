@@ -46,10 +46,22 @@ MeshLink does not provide unlimited range. Multi-hop communication requires othe
 
 ## Build
 
-The repository currently does not include the Gradle Wrapper scripts or wrapper JAR. Install a compatible JDK (17) and Gradle (9.3.1), then run:
+The repository currently does not include the Gradle Wrapper scripts or wrapper JAR. Install JDK 21 and Gradle 9.3.1, then run:
 
 ```bash
 gradle --version
+
+# Generate the local debug key expected by app/build.gradle.kts (do not use for release signing).
+keytool -genkeypair -v \
+  -keystore debug.keystore \
+  -storepass android \
+  -alias androiddebugkey \
+  -keypass android \
+  -keyalg RSA \
+  -keysize 2048 \
+  -validity 10000 \
+  -dname "CN=Android Debug,O=Android,C=US"
+
 gradle --no-daemon assembleDebug
 gradle --no-daemon testDebugUnitTest
 ```

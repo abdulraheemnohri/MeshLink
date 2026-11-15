@@ -26,6 +26,7 @@ import com.example.core.crypto.LocalIdentityKeys
 import com.example.core.permissions.HardwareCapabilities
 import com.example.core.protocol.MeshPacket
 import com.example.core.protocol.MeshPacketCodec
+import com.example.core.protocol.BleFrameCodec
 import com.example.core.protocol.TransportType
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -61,6 +62,7 @@ class BleMeshTransport(
     private var advertiser: BluetoothLeAdvertiser? = null
     private var gattServer: BluetoothGattServer? = null
     private val discoveredDevices = ConcurrentHashMap<String, BluetoothDevice>()
+    private val incomingFrames = ConcurrentHashMap<String, BleFrameCodec.Reassembler>()
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -139,7 +141,13 @@ class BleMeshTransport(
     @SuppressLint("MissingPermission")
     override suspend fun stop() {
         isRunning = false
-        if (!HardwareCapabilities.hasBluetoothPermissions(context)) return
+        incomingFrames.clear()
+        discoveredDevices.clear()
+        if (!HardwareCapabilities.hasBluetoothPermissions(context)) {
+            runCatching { gattServer?.close() }
+            gattServer = null
+            return
+        }
         runCatching { scanner?.stopScan(scanCallback) }
         runCatching { advertiser?.stopAdvertising(advertiseCallback) }
         runCatching { gattServer?.close() }
@@ -166,29 +174,69 @@ class BleMeshTransport(
 
         val payloadBytes = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
         val resultDeferred = CompletableDeferred<Boolean>()
+        var frames: List<ByteArray> = emptyList()
+        var nextFrame = 0
+        var packetCharacteristic: BluetoothGattCharacteristic? = null
+        var negotiatedMtu = 23
 
         val gatt = device.connectGatt(context, false, object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
-                if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    g.discoverServices()
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    if (!resultDeferred.isCompleted) resultDeferred.complete(false)
+                    g.close()
+                } else if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    if (!g.requestMtu(517)) g.discoverServices()
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     if (!resultDeferred.isCompleted) resultDeferred.complete(false)
                     g.close()
                 }
             }
 
+            override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+                negotiatedMtu = if (status == BluetoothGatt.GATT_SUCCESS) mtu else 23
+                g.discoverServices()
+            }
+
             override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-                val char = g.getService(SERVICE_UUID)?.getCharacteristic(PACKET_CHAR_UUID)
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    resultDeferred.complete(false)
+                    g.disconnect()
+                    return
+                }
+                packetCharacteristic = g.getService(SERVICE_UUID)?.getCharacteristic(PACKET_CHAR_UUID)
+                val char = packetCharacteristic
                 if (char == null) {
                     resultDeferred.complete(false)
                     g.disconnect()
                     return
                 }
+                frames = runCatching {
+                    BleFrameCodec.fragment(payloadBytes, negotiatedMtu - 3)
+                }.getOrElse {
+                    resultDeferred.complete(false)
+                    g.disconnect()
+                    return
+                }
+                nextFrame = 0
+                writeNextFrame(g)
+            }
+
+            private fun writeNextFrame(g: BluetoothGatt) {
+                val char = packetCharacteristic ?: run {
+                    resultDeferred.complete(false)
+                    g.disconnect()
+                    return
+                }
+                if (nextFrame >= frames.size) {
+                    resultDeferred.complete(true)
+                    g.disconnect()
+                    return
+                }
                 @Suppress("DEPRECATION")
-                char.value = payloadBytes
+                char.value = frames[nextFrame]
+                char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
                 @Suppress("DEPRECATION")
-                val ok = g.writeCharacteristic(char)
-                if (!ok) {
+                if (!g.writeCharacteristic(char)) {
                     resultDeferred.complete(false)
                     g.disconnect()
                 }
@@ -199,15 +247,19 @@ class BleMeshTransport(
                 characteristic: BluetoothGattCharacteristic,
                 status: Int
             ) {
-                resultDeferred.complete(status == BluetoothGatt.GATT_SUCCESS)
-                g.disconnect()
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    resultDeferred.complete(false)
+                    g.disconnect()
+                    return
+                }
+                nextFrame += 1
+                writeNextFrame(g)
             }
         })
 
-        return withTimeoutOrNull(6_000L) { resultDeferred.await() } ?: run {
-            runCatching { gatt?.close() }
-            false
-        }
+        val delivered = withTimeoutOrNull(180_000L) { resultDeferred.await() } ?: false
+        runCatching { gatt?.close() }
+        return delivered
     }
 
     @SuppressLint("MissingPermission")
@@ -255,17 +307,23 @@ class BleMeshTransport(
                 if (responseNeeded) {
                     gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
                 }
-                if (characteristic.uuid == PACKET_CHAR_UUID) {
-                    val decoded = MeshPacketCodec.decode(String(value, Charsets.UTF_8))
-                    if (decoded != null) {
-                        scope.launch {
-                            _events.emit(
-                                TransportEvent.PacketReceived(
-                                    packet = decoded,
-                                    transportType = TransportType.BLE,
-                                    remoteAddress = device.address
+                if (characteristic.uuid == PACKET_CHAR_UUID && offset == 0 && !preparedWrite) {
+                    val reassembler = incomingFrames.getOrPut(device.address) {
+                        BleFrameCodec.Reassembler(transferTimeoutMs = 180_000L)
+                    }
+                    val completePayload = reassembler.accept(value)
+                    if (completePayload != null) {
+                        val decoded = MeshPacketCodec.decode(String(completePayload, Charsets.UTF_8))
+                        if (decoded != null) {
+                            scope.launch {
+                                _events.emit(
+                                    TransportEvent.PacketReceived(
+                                        packet = decoded,
+                                        transportType = TransportType.BLE,
+                                        remoteAddress = device.address
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                 }

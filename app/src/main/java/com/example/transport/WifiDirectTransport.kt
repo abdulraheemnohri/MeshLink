@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
+import android.net.wifi.p2p.WifiP2pGroup
 import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.Looper
@@ -24,8 +25,11 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.DataOutputStream
+import java.io.DataInputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 class WifiDirectTransport(
     private val context: Context
@@ -45,7 +49,10 @@ class WifiDirectTransport(
         context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
     private var channel: WifiP2pManager.Channel? = null
     private var groupOwnerAddress: String? = null
+    @Volatile private var isGroupOwner: Boolean? = null
+    @Volatile private var groupFormed: Boolean = false
     private var receiverRegistered = false
+    private val peerIps = ConcurrentHashMap<String, String>()
 
     private val receiver = object : BroadcastReceiver() {
         @SuppressLint("MissingPermission")
@@ -54,16 +61,19 @@ class WifiDirectTransport(
                 WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
                     if (HardwareCapabilities.hasNearbyWifiPermission(context)) {
                         manager?.requestPeers(channel) { peers ->
-                            peers.deviceList.forEach { dev ->
-                                emitP2pDevice(dev)
-                            }
+                            peers.deviceList.forEach { dev -> emitP2pDevice(dev) }
+                        refreshGroupClients()
                         }
                     }
                 }
                 WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
                     manager?.requestConnectionInfo(channel) { info ->
+                        groupFormed = info.groupFormed
+                        isGroupOwner = if (info.groupFormed) info.isGroupOwner else null
+                        groupOwnerAddress = if (info.groupFormed) info.groupOwnerAddress?.hostAddress else null
+                        if (!info.groupFormed) peerIps.clear()
                         if (info.groupFormed) {
-                            groupOwnerAddress = info.groupOwnerAddress?.hostAddress
+                            refreshGroupClients()
                             _events.tryEmit(
                                 TransportEvent.Log(
                                     transportType = TransportType.WIFI_DIRECT,
@@ -105,6 +115,10 @@ class WifiDirectTransport(
 
     override suspend fun stop() {
         isRunning = false
+        peerIps.clear()
+        groupFormed = false
+        isGroupOwner = null
+        groupOwnerAddress = null
         if (receiverRegistered) {
             runCatching { context.unregisterReceiver(receiver) }
             receiverRegistered = false
@@ -167,22 +181,72 @@ class WifiDirectTransport(
     }
 
     override suspend fun sendPacket(endpoint: DiscoveredEndpoint, packet: MeshPacket): Boolean {
-        val targetIp = groupOwnerAddress ?: endpoint.address
-        if (!targetIp.contains('.')) return false
+        if (!groupFormed) return false
+        // Group clients send to the group owner. The owner sends to a client only after
+        // that client's DHCP address has been observed in the local ARP table.
+        val targetIp = if (isGroupOwner == true) {
+            endpoint.address.takeIf { isValidIpv4(it) && it != groupOwnerAddress } ?: return false
+        } else {
+            groupOwnerAddress?.takeIf(::isValidIpv4) ?: return false
+        }
         return withContext(Dispatchers.IO) {
             runCatching {
                 val encoded = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
+                if (encoded.size !in 1..2 * 1024 * 1024) return@withContext false
                 Socket().use { socket ->
                     socket.connect(InetSocketAddress(targetIp, LanMeshTransport.TCP_PORT), 4_000)
+                    socket.soTimeout = 10_000
                     val out = DataOutputStream(socket.getOutputStream())
                     out.writeInt(encoded.size)
                     out.write(encoded)
                     out.flush()
+                    DataInputStream(socket.getInputStream()).readUnsignedByte() == 1
                 }
-                true
+            }.onFailure { error ->
+                _events.tryEmit(
+                    TransportEvent.Log(
+                        transportType = transportType,
+                        eventType = "P2P_TX_ERR",
+                        message = "Wi-Fi Direct send to $targetIp failed: ${error.message}"
+                    )
+                )
             }.getOrDefault(false)
         }
     }
+
+    @SuppressLint("MissingPermission")
+    private fun refreshGroupClients() {
+        val ch = channel ?: return
+        if (!HardwareCapabilities.hasNearbyWifiPermission(context) || isGroupOwner != true) return
+        manager?.requestGroupInfo(ch) { group: WifiP2pGroup? ->
+            val clients = group?.clientList ?: return@requestGroupInfo
+            clients.forEach { device ->
+                val peerId = device.deviceAddress.replace(":", "").lowercase()
+                val ip = lookupArpAddress(device.deviceAddress)
+                if (ip != null) {
+                    peerIps[peerId] = ip
+                    emitP2pDevice(device)
+                }
+            }
+        }
+    }
+
+    private fun lookupArpAddress(macAddress: String): String? {
+        val targetMac = macAddress.lowercase()
+        return runCatching {
+            File("/proc/net/arp").useLines { lines ->
+                lines.drop(1).firstNotNullOfOrNull { line ->
+                    val fields = line.trim().split(Regex("\\s+"))
+                    if (fields.size >= 4 && fields[3].lowercase() == targetMac &&
+                        fields[1] != "0x0" && isValidIpv4(fields[0])
+                    ) fields[0] else null
+                }
+            }
+        }.getOrNull()
+    }
+
+    private fun isValidIpv4(address: String): Boolean =
+        address.matches(Regex("^(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$"))
 
     private fun emitP2pDevice(device: WifiP2pDevice) {
         val peerId = device.deviceAddress.replace(":", "").lowercase()
@@ -196,7 +260,8 @@ class WifiDirectTransport(
                         signingPublicKey = "",
                         agreementPublicKey = "",
                         transportType = TransportType.WIFI_DIRECT,
-                        address = groupOwnerAddress ?: device.deviceAddress,
+                        // A P2P MAC address is not an IP address and must never be used as one.
+                        address = if (isGroupOwner == true) peerIps[peerId].orEmpty() else groupOwnerAddress.orEmpty(),
                         port = LanMeshTransport.TCP_PORT,
                         rssiDbm = -55
                     )
