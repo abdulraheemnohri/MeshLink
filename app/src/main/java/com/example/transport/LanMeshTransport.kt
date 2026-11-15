@@ -86,6 +86,7 @@ class LanMeshTransport(
 
     override suspend fun stop() {
         isRunning = false
+        rateWindows.clear()
         jobs.forEach { it.cancel() }
         jobs.clear()
         runCatching { serverSocket?.close() }
@@ -239,6 +240,7 @@ class LanMeshTransport(
             rateWindows.entries.removeIf { now - it.value.first > RATE_WINDOW_MS }
         }
         val previous = rateWindows[remoteIp]
+        if (previous == null && rateWindows.size >= MAX_RATE_WINDOW_PEERS) return false
         val next = if (previous == null || now - previous.first >= RATE_WINDOW_MS) {
             now to 1
         } else {
