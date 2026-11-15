@@ -76,6 +76,9 @@ class BleMeshTransport(
                 ?: device.address.replace(":", "").lowercase()
             val alias = deviceName ?: "BLE-${peerId.take(6)}"
 
+            if (!discoveredDevices.containsKey(peerId) && discoveredDevices.size >= MAX_BLE_PEERS) {
+                discoveredDevices.keys.firstOrNull()?.let(discoveredDevices::remove)
+            }
             discoveredDevices[peerId] = device
             scope.launch {
                 _events.emit(
@@ -295,6 +298,12 @@ class BleMeshTransport(
     @SuppressLint("MissingPermission")
     private fun startGattServer() {
         gattServer = btManager?.openGattServer(context, object : BluetoothGattServerCallback() {
+            override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
+                if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    incomingFrames.remove(device.address)
+                }
+            }
+
             override fun onCharacteristicWriteRequest(
                 device: BluetoothDevice,
                 requestId: Int,
@@ -308,8 +317,15 @@ class BleMeshTransport(
                     gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
                 }
                 if (characteristic.uuid == PACKET_CHAR_UUID && offset == 0 && !preparedWrite) {
-                    val reassembler = incomingFrames.getOrPut(device.address) {
-                        BleFrameCodec.Reassembler(transferTimeoutMs = 180_000L)
+                    val reassembler = synchronized(incomingFrames) {
+                        incomingFrames[device.address] ?: run {
+                            if (incomingFrames.size >= MAX_BLE_PEERS) {
+                                incomingFrames.keys.firstOrNull()?.let(incomingFrames::remove)
+                            }
+                            BleFrameCodec.Reassembler(transferTimeoutMs = 180_000L).also {
+                                incomingFrames[device.address] = it
+                            }
+                        }
                     }
                     val completePayload = reassembler.accept(value)
                     if (completePayload != null) {
@@ -340,6 +356,7 @@ class BleMeshTransport(
     }
 
     companion object {
+        private const val MAX_BLE_PEERS = 64
         val SERVICE_UUID: UUID = UUID.fromString("7d2ea901-4f8b-4a3c-9c1e-8a6b5d4e3f01")
         val PACKET_CHAR_UUID: UUID = UUID.fromString("7d2ea902-4f8b-4a3c-9c1e-8a6b5d4e3f01")
     }
