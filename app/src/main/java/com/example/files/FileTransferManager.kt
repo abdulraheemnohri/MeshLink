@@ -257,7 +257,7 @@ class FileTransferManager(
     private suspend fun handleIncomingFilePacket(senderId: String, payload: JSONObject) {
         val kind = payload.optString("kind")
         val transferId = payload.optString("transferId")
-        if (transferId.isBlank() || transferId.length > 96) return
+        if (!transferId.matches(Regex("[A-Za-z0-9_-]{1,96}"))) return
 
         if (kind == "ACK") {
             val transfer = repository.getFileTransferById(transferId) ?: return
@@ -322,11 +322,20 @@ class FileTransferManager(
                 isOutgoing = false,
                 status = "TRANSFERRING"
             )
+            val existing = repository.getFileTransferById(transferId)
+            if (existing != null) {
+                if (existing.isOutgoing || existing.peerId != senderId ||
+                    existing.totalBytes != totalBytes || existing.totalChunks != totalChunks ||
+                    !existing.sha256.equals(expectedHash, true)
+                ) return
+                sendFileAck(senderId, transferId, -1)
+                return
+            }
             repository.upsertFileTransfer(transfer)
             sendFileAck(senderId, transferId, -1)
         } else if (kind == "CHUNK") {
             val transfer = repository.getFileTransferById(transferId) ?: return
-            if (transfer.isOutgoing || transfer.peerId != senderId) return
+            if (transfer.isOutgoing || transfer.peerId != senderId || transfer.status !in setOf("TRANSFERRING", "PAUSED")) return
             val index = payload.optInt("index", -1)
             val expectedChunkSha = payload.optString("chunkSha256", "")
             val dataB64 = payload.optString("data", "")
