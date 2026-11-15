@@ -71,6 +71,7 @@ class WifiDirectTransport(
                         groupFormed = info.groupFormed
                         isGroupOwner = if (info.groupFormed) info.isGroupOwner else null
                         groupOwnerAddress = if (info.groupFormed) info.groupOwnerAddress?.hostAddress else null
+                        if (!info.groupFormed) peerIps.clear()
                         if (info.groupFormed) {
                             refreshGroupClients()
                             _events.tryEmit(
@@ -114,6 +115,10 @@ class WifiDirectTransport(
 
     override suspend fun stop() {
         isRunning = false
+        peerIps.clear()
+        groupFormed = false
+        isGroupOwner = null
+        groupOwnerAddress = null
         if (receiverRegistered) {
             runCatching { context.unregisterReceiver(receiver) }
             receiverRegistered = false
