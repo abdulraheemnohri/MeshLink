@@ -983,6 +983,7 @@ class MeshRoutingEngine(
                         deliveredAt = System.currentTimeMillis()
                     )
                 )
+                sendDeliveryAck(packet.senderId, packet.messageId)
             }
 
             PacketType.VOICE_PACKET -> {
