@@ -46,7 +46,7 @@ MeshLink does not provide unlimited range. Multi-hop communication requires othe
 
 ## Build
 
-The repository currently does not include the Gradle Wrapper scripts or wrapper JAR. Install a compatible JDK (17) and Gradle (9.3.1), then run:
+The repository currently does not include the Gradle Wrapper scripts or wrapper JAR. Install JDK 21 and Gradle 9.3.1, then run:
 
 ```bash
 gradle --version
