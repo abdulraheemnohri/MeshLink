@@ -101,6 +101,7 @@ class LanMeshTransport(
         return withContext(Dispatchers.IO) {
             runCatching {
                 val encoded = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
+                if (encoded.size !in 1..MAX_FRAME_BYTES) return@withContext false
                 Socket().use { socket ->
                     socket.connect(InetSocketAddress(endpoint.address, endpoint.port), CONNECT_TIMEOUT_MS)
                     socket.soTimeout = READ_TIMEOUT_MS
@@ -108,8 +109,8 @@ class LanMeshTransport(
                     out.writeInt(encoded.size)
                     out.write(encoded)
                     out.flush()
+                    DataInputStream(socket.getInputStream()).readUnsignedByte() == 1
                 }
-                true
             }.onFailure { err ->
                 _events.tryEmit(
                     TransportEvent.Log(
@@ -150,6 +151,7 @@ class LanMeshTransport(
                     s.soTimeout = READ_TIMEOUT_MS
                     val input = DataInputStream(s.getInputStream())
                     val length = input.readInt()
+                    var accepted = false
                     if (length in 1..MAX_FRAME_BYTES) {
                         val buf = ByteArray(length)
                         input.readFully(buf)
@@ -163,7 +165,12 @@ class LanMeshTransport(
                                     remoteAddress = s.inetAddress.hostAddress ?: "lan"
                                 )
                             )
+                            accepted = true
                         }
+                    }
+                    DataOutputStream(s.getOutputStream()).apply {
+                        writeByte(if (accepted) 1 else 0)
+                        flush()
                     }
                 }
             }
