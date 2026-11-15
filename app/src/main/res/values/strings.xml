@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">MeshLink</string>
+    <string name="app_tagline">Decentralized Offline Mesh Network</string>
+    <string name="relay_channel_name">MeshLink Relay Node</string>
+    <string name="relay_channel_desc">Keeps offline BLE, Wi-Fi Direct, and LAN mesh routing active</string>
+    <string name="relay_notification_title">MeshLink Relay Active</string>
+    <string name="relay_notification_text">Local encrypted mesh transport and store-and-forward relay running</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_mesh">Mesh</string>
+    <string name="nav_chats">Chats</string>
+    <string name="nav_share">Comms</string>
+    <string name="nav_node">Node</string>
+    <string name="onboarding_title">Zero-Server Offline Mesh</string>
+    <string name="onboarding_subtitle">Connect nearby phones via Bluetooth LE, Wi-Fi Direct, Wi-Fi Aware, and Local LAN with end-to-end encryption and multi-hop DTN forwarding.</string>
+    <string name="onboarding_cta">Initialize Local Node</string>
+    <string name="emergency_banner">EMERGENCY BEACON READY</string>
+</resources>

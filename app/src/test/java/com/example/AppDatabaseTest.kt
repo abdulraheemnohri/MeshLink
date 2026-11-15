@@ -1,0 +1,129 @@
+package com.example
+
+import android.content.Context
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.example.data.database.AppDatabase
+import com.example.data.entities.DeviceIdentity
+import com.example.data.entities.Peers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
+class AppDatabaseTest {
+
+    private lateinit var db: AppDatabase
+
+    @Before
+    fun setup() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+    }
+
+    @After
+    fun tearDown() {
+        db.close()
+    }
+
+    @Test
+    fun deviceIdentityDao_persistsAndUpdatesLocalNode() = runBlocking {
+        val dao = db.deviceIdentityDao()
+        assertNull(dao.getIdentityOnce())
+
+        val identity = DeviceIdentity(
+            deviceId = "node_local_01",
+            alias = "RelayAlpha",
+            signingPublicKey = "sig_pub_b64",
+            agreementPublicKey = "kx_pub_b64",
+            fingerprint = "AA:BB:CC:DD"
+        )
+        dao.upsert(identity)
+
+        val fetched = dao.getIdentityOnce()
+        assertNotNull(fetched)
+        assertEquals("RelayAlpha", fetched!!.alias)
+
+        dao.update(fetched.copy(alias = "RelayAlphaUpdated"))
+        val observed = dao.observeIdentity().first()
+        assertEquals("RelayAlphaUpdated", observed?.alias)
+
+        dao.clearAll()
+        assertNull(dao.getIdentityOnce())
+    }
+
+    @Test
+    fun peerDao_persistsQueriesAndDeletesPeers() = runBlocking {
+        val peerDao = db.peerDao()
+        val p1 = Peers(
+            deviceId = "peer_01",
+            alias = "NodeBravo",
+            signingPublicKey = "sig1",
+            agreementPublicKey = "kx1",
+            fingerprint = "FP1",
+            isConnected = true,
+            activeTransport = "BLE"
+        )
+        val p2 = Peers(
+            deviceId = "peer_02",
+            alias = "NodeCharlie",
+            signingPublicKey = "sig2",
+            agreementPublicKey = "kx2",
+            fingerprint = "FP2",
+            isConnected = false,
+            activeTransport = "NONE"
+        )
+        peerDao.upsertAll(listOf(p1, p2))
+
+        val all = peerDao.observeAllPeers().first()
+        assertEquals(2, all.size)
+        assertEquals("peer_01", all.first().deviceId)
+
+        val connected = peerDao.observeConnectedPeers().first()
+        assertEquals(1, connected.size)
+        assertEquals("NodeBravo", connected.first().alias)
+
+        peerDao.setVerified("peer_02", true)
+        assertTrue(peerDao.getPeerById("peer_02")?.verifiedByQr == true)
+
+        peerDao.updateConnectionState("peer_02", true, "LOCAL_LAN", 123456L)
+        assertEquals(2, peerDao.getConnectedPeersOnce().size)
+
+        peerDao.deleteById("peer_01")
+        assertNull(peerDao.getPeerById("peer_01"))
+    }
+
+    @Test
+    fun userSettingsDao_persistsBiometricPreferences() = runBlocking {
+        val userSettingsDao = db.userSettingsDao()
+        assertNull(userSettingsDao.getUserSettingsOnce())
+
+        val settings = com.example.data.entities.UserSettings(
+            biometricLockEnabled = true,
+            requireAuthOnLaunch = true,
+            biometricPromptTitle = "Vault Test"
+        )
+        userSettingsDao.upsert(settings)
+
+        val fetched = userSettingsDao.getUserSettingsOnce()
+        assertNotNull(fetched)
+        assertTrue(fetched!!.biometricLockEnabled)
+        assertEquals("Vault Test", fetched.biometricPromptTitle)
+
+        userSettingsDao.setBiometricLockEnabled(false)
+        val updated = userSettingsDao.getUserSettingsOnce()
+        org.junit.Assert.assertFalse(updated!!.biometricLockEnabled)
+    }
+}

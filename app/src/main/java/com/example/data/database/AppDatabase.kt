@@ -1,0 +1,86 @@
+package com.example.data.database
+
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import com.example.data.dao.ConnectionDao
+import com.example.data.dao.DeviceIdentityDao
+import com.example.data.dao.EmergencyBroadcastDao
+import com.example.data.dao.EventLogDao
+import com.example.data.dao.FileTransferDao
+import com.example.data.dao.GroupDao
+import com.example.data.dao.MessageDao
+import com.example.data.dao.PeerDao
+import com.example.data.dao.PendingPacketDao
+import com.example.data.dao.RouteDao
+import com.example.data.dao.SettingsDao
+import com.example.data.dao.UserSettingsDao
+import com.example.data.entities.ConnectionEntity
+import com.example.data.entities.DeviceIdentityEntity
+import com.example.data.entities.EmergencyBroadcastEntity
+import com.example.data.entities.FileChunkEntity
+import com.example.data.entities.FileTransferEntity
+import com.example.data.entities.GroupEntity
+import com.example.data.entities.GroupMemberEntity
+import com.example.data.entities.MessageEntity
+import com.example.data.entities.NetworkEventEntity
+import com.example.data.entities.PeerEntity
+import com.example.data.entities.PendingPacketEntity
+import com.example.data.entities.RouteEntity
+import com.example.data.entities.SecurityEventEntity
+import com.example.data.entities.SettingsEntity
+import com.example.data.entities.UserSettings
+
+@Database(
+    entities = [
+        DeviceIdentityEntity::class,
+        PeerEntity::class,
+        ConnectionEntity::class,
+        MessageEntity::class,
+        GroupEntity::class,
+        GroupMemberEntity::class,
+        EmergencyBroadcastEntity::class,
+        RouteEntity::class,
+        PendingPacketEntity::class,
+        FileTransferEntity::class,
+        FileChunkEntity::class,
+        SecurityEventEntity::class,
+        NetworkEventEntity::class,
+        SettingsEntity::class,
+        UserSettings::class
+    ],
+    version = 3,
+    exportSchema = false
+)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun deviceIdentityDao(): DeviceIdentityDao
+    abstract fun peerDao(): PeerDao
+    abstract fun connectionDao(): ConnectionDao
+    abstract fun messageDao(): MessageDao
+    abstract fun groupDao(): GroupDao
+    abstract fun emergencyBroadcastDao(): EmergencyBroadcastDao
+    abstract fun routeDao(): RouteDao
+    abstract fun pendingPacketDao(): PendingPacketDao
+    abstract fun fileTransferDao(): FileTransferDao
+    abstract fun eventLogDao(): EventLogDao
+    abstract fun settingsDao(): SettingsDao
+    abstract fun userSettingsDao(): UserSettingsDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: AppDatabase? = null
+
+        fun getInstance(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "meshlink_local.db"
+                ).fallbackToDestructiveMigration(dropAllTables = true).build().also {
+                    INSTANCE = it
+                }
+            }
+        }
+    }
+}

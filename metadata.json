@@ -1,0 +1,6 @@
+{
+  "name": "MeshLink",
+  "description": "Decentralized offline Android mesh communication network with multi-hop routing, end-to-end encryption, file sharing, voice push-to-talk, and live network topology.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
