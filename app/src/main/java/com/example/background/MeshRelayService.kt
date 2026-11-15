@@ -21,11 +21,14 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MeshRelayService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var startupJob: Job? = null
     private var maintenanceJob: Job? = null
+    @Volatile private var stopping = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -36,55 +39,95 @@ class MeshRelayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            stopRelayAndSelf()
+            stopRelayAndSelf(startId)
             return START_NOT_STICKY
         }
 
         startForeground(NOTIFICATION_ID, buildNotification())
         val container = (application as MeshLinkApplication).container
 
-        serviceScope.launch {
-            val settings = container.repository.getSettingsOnce()
-            container.repository.ensureInitialized()
-            if (settings.localLanEnabled) container.lanTransport.start()
-            if (settings.bleEnabled) container.bleTransport.start()
-            if (settings.wifiDirectEnabled) container.wifiDirectTransport.start()
-            if (settings.wifiAwareEnabled) container.wifiAwareTransport.start()
-            container.isRelayRunning.value = true
-        }
+        // START_STICKY may cause repeated start commands. Do not initialize radios twice.
+        if (startupJob?.isActive != true && !container.isRelayRunning.value) {
+            stopping = false
+            startupJob = serviceScope.launch {
+                runCatching {
+                    val settings = container.repository.getSettingsOnce()
+                    container.repository.ensureInitialized()
 
-        maintenanceJob?.cancel()
-        maintenanceJob = serviceScope.launch {
-            while (isActive) {
-                container.routingEngine.flushStoreAndForwardQueue()
-                container.repository.purgeExpiredCache()
-                delay(15_000L)
+                    if (settings.localLanEnabled) runCatching { container.lanTransport.start() }
+                    if (settings.bleEnabled) runCatching { container.bleTransport.start() }
+                    if (settings.wifiDirectEnabled) runCatching { container.wifiDirectTransport.start() }
+                    if (settings.wifiAwareEnabled) runCatching { container.wifiAwareTransport.start() }
+
+                    container.isRelayRunning.value = true
+                    startMaintenance(container)
+                }.onFailure {
+                    container.isRelayRunning.value = false
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
             }
         }
 
         return START_STICKY
     }
 
-    override fun onDestroy() {
-        maintenanceJob?.cancel()
-        val container = (application as? MeshLinkApplication)?.container
-        if (container != null) {
-            container.isRelayRunning.value = false
-            serviceScope.launch {
-                container.lanTransport.stop()
-                container.bleTransport.stop()
-                container.wifiDirectTransport.stop()
-                container.wifiAwareTransport.stop()
-                container.repository.markAllDisconnected()
+    private fun startMaintenance(container: MeshLinkApplication.Container) {
+        if (maintenanceJob?.isActive == true) return
+        maintenanceJob = serviceScope.launch {
+            while (isActive && !stopping) {
+                runCatching { container.routingEngine.flushStoreAndForwardQueue() }
+                runCatching { container.repository.purgeExpiredCache() }
+                delay(MAINTENANCE_INTERVAL_MS)
             }
         }
+    }
+
+    private fun stopRelayAndSelf(startId: Int) {
+        if (stopping) return
+        stopping = true
+        val container = (application as? MeshLinkApplication)?.container
+        serviceScope.launch {
+            startupJob?.cancel()
+            maintenanceJob?.cancel()
+            if (container != null) {
+                stopTransports(container)
+                container.isRelayRunning.value = false
+                runCatching { container.repository.markAllDisconnected() }
+            }
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelfResult(startId)
+        }
+    }
+
+    override fun onDestroy() {
+        stopping = true
+        startupJob?.cancel()
+        maintenanceJob?.cancel()
+        val container = (application as? MeshLinkApplication)?.container
         serviceScope.cancel()
+
+        // Cleanup must not be launched in the scope that is immediately cancelled.
+        // A bounded independent IO scope lets radio adapters release their resources.
+        if (container != null) {
+            val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            cleanupScope.launch {
+                withTimeoutOrNull(CLEANUP_TIMEOUT_MS) {
+                    stopTransports(container)
+                    container.isRelayRunning.value = false
+                    runCatching { container.repository.markAllDisconnected() }
+                }
+                cleanupScope.cancel()
+            }
+        }
         super.onDestroy()
     }
 
-    private fun stopRelayAndSelf() {
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+    private suspend fun stopTransports(container: MeshLinkApplication.Container) {
+        runCatching { container.lanTransport.stop() }
+        runCatching { container.bleTransport.stop() }
+        runCatching { container.wifiDirectTransport.stop() }
+        runCatching { container.wifiAwareTransport.stop() }
     }
 
     private fun createNotificationChannel() {
@@ -120,6 +163,8 @@ class MeshRelayService : Service() {
     companion object {
         private const val CHANNEL_ID = "meshlink_relay_channel"
         private const val NOTIFICATION_ID = 4201
+        private const val MAINTENANCE_INTERVAL_MS = 15_000L
+        private const val CLEANUP_TIMEOUT_MS = 5_000L
         const val ACTION_START = "com.example.action.START_RELAY"
         const val ACTION_STOP = "com.example.action.STOP_RELAY"
 
