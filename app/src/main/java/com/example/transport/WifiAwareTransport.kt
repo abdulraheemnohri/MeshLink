@@ -18,7 +18,10 @@ import com.example.core.crypto.LocalIdentityKeys
 import com.example.core.permissions.HardwareCapabilities
 import com.example.core.protocol.MeshPacket
 import com.example.core.protocol.MeshPacketCodec
+import com.example.core.protocol.BleFrameCodec
 import com.example.core.protocol.TransportType
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,6 +50,9 @@ class WifiAwareTransport(
     private var publishSession: PublishDiscoverySession? = null
     private var subscribeSession: SubscribeDiscoverySession? = null
     private val peerHandles = ConcurrentHashMap<String, PeerHandle>()
+    private val incomingFrames = ConcurrentHashMap<String, BleFrameCodec.Reassembler>()
+    private val pendingSends = ConcurrentHashMap<Int, CompletableDeferred<Boolean>>()
+    private val nextSendId = java.util.concurrent.atomic.AtomicInteger(1)
 
     @SuppressLint("MissingPermission")
     override suspend fun start() {
@@ -109,6 +115,21 @@ class WifiAwareTransport(
             override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
                 handleIncomingBytes(peerHandle, message)
             }
+
+            override fun onMessageSendSucceeded(messageId: Int) {
+                pendingSends.remove(messageId)?.complete(true)
+            }
+
+            override fun onMessageSendFailed(messageId: Int, reason: Int) {
+                pendingSends.remove(messageId)?.complete(false)
+                _events.tryEmit(
+                    TransportEvent.Log(
+                        transportType = TransportType.WIFI_AWARE,
+                        eventType = "AWARE_TX_ERR",
+                        message = "Wi-Fi Aware frame send failed (reason $reason)"
+                    )
+                )
+            }
         }, handler)
 
         val subConfig = SubscribeConfig.Builder()
@@ -154,7 +175,10 @@ class WifiAwareTransport(
     }
 
     private fun handleIncomingBytes(peerHandle: PeerHandle, message: ByteArray) {
-        val packet = MeshPacketCodec.decode(String(message, Charsets.UTF_8)) ?: return
+        val peerKey = peerHandle.hashCode().toString()
+        val reassembler = incomingFrames.getOrPut(peerKey) { BleFrameCodec.Reassembler() }
+        val complete = reassembler.accept(message) ?: return
+        val packet = MeshPacketCodec.decode(String(complete, Charsets.UTF_8)) ?: return
         peerHandles[packet.senderId] = peerHandle
         scope.launch {
             _events.emit(
@@ -187,11 +211,29 @@ class WifiAwareTransport(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
         val handle = peerHandles[endpoint.deviceId] ?: return false
         val sub = subscribeSession ?: return false
-        return runCatching {
-            val bytes = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
-            sub.sendMessage(handle, packet.messageId.hashCode(), bytes)
-            true
-        }.getOrDefault(false)
+        val bytes = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
+        val frames = runCatching { BleFrameCodec.fragment(bytes, AWARE_FRAME_BYTES) }.getOrNull()
+            ?: return false
+
+        for (frame in frames) {
+            val messageId = nextSendId.getAndIncrement()
+            val result = CompletableDeferred<Boolean>()
+            pendingSends[messageId] = result
+            val queued = runCatching {
+                sub.sendMessage(handle, messageId, frame)
+                true
+            }.getOrDefault(false)
+            if (!queued) {
+                pendingSends.remove(messageId)
+                return false
+            }
+            val sent = withTimeoutOrNull(SEND_TIMEOUT_MS) { result.await() } ?: false
+            if (!sent) {
+                pendingSends.remove(messageId)
+                return false
+            }
+        }
+        return true
     }
 
     companion object {
