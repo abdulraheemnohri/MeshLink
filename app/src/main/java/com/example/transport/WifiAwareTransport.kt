@@ -149,6 +149,9 @@ class WifiAwareTransport(
                 val peerId = String(serviceSpecificInfo, Charsets.UTF_8).ifBlank {
                     "aware_${peerHandle.hashCode()}"
                 }
+                if (!peerHandles.containsKey(peerId) && peerHandles.size >= MAX_AWARE_PEERS) {
+                    peerHandles.keys.firstOrNull()?.let(peerHandles::remove)
+                }
                 peerHandles[peerId] = peerHandle
                 scope.launch {
                     _events.emit(
@@ -191,7 +194,16 @@ class WifiAwareTransport(
 
     private fun handleIncomingBytes(peerHandle: PeerHandle, message: ByteArray) {
         val peerKey = peerHandle.hashCode().toString()
-        val reassembler = incomingFrames.getOrPut(peerKey) { BleFrameCodec.Reassembler(transferTimeoutMs = 120_000L) }
+        val reassembler = synchronized(incomingFrames) {
+            incomingFrames[peerKey] ?: run {
+                if (incomingFrames.size >= MAX_AWARE_PEERS) {
+                    incomingFrames.keys.firstOrNull()?.let(incomingFrames::remove)
+                }
+                BleFrameCodec.Reassembler(transferTimeoutMs = 120_000L).also {
+                    incomingFrames[peerKey] = it
+                }
+            }
+        }
         val complete = reassembler.accept(message) ?: return
         val packet = MeshPacketCodec.decode(String(complete, Charsets.UTF_8)) ?: return
         peerHandles[packet.senderId] = peerHandle
@@ -258,6 +270,7 @@ class WifiAwareTransport(
     companion object {
         // Keep each message below the Android Wi-Fi Aware message payload ceiling.
         private const val AWARE_FRAME_BYTES = 255
+        private const val MAX_AWARE_PEERS = 64
         private const val SEND_TIMEOUT_MS = 8_000L
         private const val SERVICE_NAME = "meshlink_aware"
     }
