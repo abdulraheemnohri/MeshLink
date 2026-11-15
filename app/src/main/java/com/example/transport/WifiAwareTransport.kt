@@ -120,13 +120,13 @@ class WifiAwareTransport(
                 pendingSends.remove(messageId)?.complete(true)
             }
 
-            override fun onMessageSendFailed(messageId: Int, reason: Int) {
+            override fun onMessageSendFailed(messageId: Int) {
                 pendingSends.remove(messageId)?.complete(false)
                 _events.tryEmit(
                     TransportEvent.Log(
                         transportType = TransportType.WIFI_AWARE,
                         eventType = "AWARE_TX_ERR",
-                        message = "Wi-Fi Aware frame send failed (reason $reason)"
+                        message = "Wi-Fi Aware frame send failed"
                     )
                 )
             }
