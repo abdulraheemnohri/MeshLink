@@ -18,6 +18,8 @@ import com.example.core.protocol.MeshPacketCodec
 import com.example.core.protocol.TransportType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -53,6 +55,7 @@ class WifiDirectTransport(
     @Volatile private var groupFormed: Boolean = false
     private var receiverRegistered = false
     private val peerIps = ConcurrentHashMap<String, String>()
+    private var clientRefreshJob: Job? = null
 
     private val receiver = object : BroadcastReceiver() {
         @SuppressLint("MissingPermission")
@@ -71,9 +74,14 @@ class WifiDirectTransport(
                         groupFormed = info.groupFormed
                         isGroupOwner = if (info.groupFormed) info.isGroupOwner else null
                         groupOwnerAddress = if (info.groupFormed) info.groupOwnerAddress?.hostAddress else null
-                        if (!info.groupFormed) peerIps.clear()
+                        if (!info.groupFormed) {
+                            peerIps.clear()
+                            clientRefreshJob?.cancel()
+                            clientRefreshJob = null
+                        }
                         if (info.groupFormed) {
                             refreshGroupClients()
+                            startClientRefreshLoop()
                             _events.tryEmit(
                                 TransportEvent.Log(
                                     transportType = TransportType.WIFI_DIRECT,
@@ -115,6 +123,8 @@ class WifiDirectTransport(
 
     override suspend fun stop() {
         isRunning = false
+        clientRefreshJob?.cancel()
+        clientRefreshJob = null
         peerIps.clear()
         groupFormed = false
         isGroupOwner = null
@@ -214,6 +224,16 @@ class WifiDirectTransport(
         }
     }
 
+    private fun startClientRefreshLoop() {
+        if (isGroupOwner != true || clientRefreshJob?.isActive == true) return
+        clientRefreshJob = scope.launch {
+            while (isRunning && groupFormed && isGroupOwner == true) {
+                refreshGroupClients()
+                delay(CLIENT_REFRESH_INTERVAL_MS)
+            }
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private fun refreshGroupClients() {
         val ch = channel ?: return
@@ -268,5 +288,9 @@ class WifiDirectTransport(
                 )
             )
         }
+    }
+
+    companion object {
+        private const val CLIENT_REFRESH_INTERVAL_MS = 3_000L
     }
 }
