@@ -152,30 +152,32 @@ class LanMeshTransport(
                     s.soTimeout = READ_TIMEOUT_MS
                     if (!isPrivateIpv4(s.inetAddress.hostAddress.orEmpty())) {
                         DataOutputStream(s.getOutputStream()).apply { writeByte(0); flush() }
-                        return@use
-                    }
-                    val input = DataInputStream(s.getInputStream())
-                    val length = input.readInt()
-                    var accepted = false
-                    if (length in 1..MAX_FRAME_BYTES) {
-                        val buf = ByteArray(length)
-                        input.readFully(buf)
-                        val raw = String(buf, Charsets.UTF_8)
-                        val packet = MeshPacketCodec.decode(raw)
-                        if (packet != null) {
-                            _events.emit(
-                                TransportEvent.PacketReceived(
-                                    packet = packet,
-                                    transportType = transportType,
-                                    remoteAddress = s.inetAddress.hostAddress ?: "lan"
+                        false
+                    } else {
+                        val input = DataInputStream(s.getInputStream())
+                        val length = input.readInt()
+                        var accepted = false
+                        if (length in 1..MAX_FRAME_BYTES) {
+                            val buf = ByteArray(length)
+                            input.readFully(buf)
+                            val raw = String(buf, Charsets.UTF_8)
+                            val packet = MeshPacketCodec.decode(raw)
+                            if (packet != null) {
+                                _events.emit(
+                                    TransportEvent.PacketReceived(
+                                        packet = packet,
+                                        transportType = transportType,
+                                        remoteAddress = s.inetAddress.hostAddress ?: "lan"
+                                    )
                                 )
-                            )
-                            accepted = true
+                                accepted = true
+                            }
                         }
-                    }
-                    DataOutputStream(s.getOutputStream()).apply {
-                        writeByte(if (accepted) 1 else 0)
-                        flush()
+                        DataOutputStream(s.getOutputStream()).apply {
+                            writeByte(if (accepted) 1 else 0)
+                            flush()
+                        }
+                        accepted
                     }
                 }
             }
