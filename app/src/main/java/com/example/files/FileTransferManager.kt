@@ -13,6 +13,7 @@ import com.example.data.entities.FileTransferEntity
 import com.example.data.repository.MeshRepository
 import com.example.routing.MeshRoutingEngine
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,7 @@ class FileTransferManager(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pausedTransfers = ConcurrentHashMap<String, Boolean>()
     private val pendingAcks = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+    private val activeTransfers = ConcurrentHashMap.newKeySet<String>()
 
     init {
         scope.launch {
@@ -112,14 +114,15 @@ class FileTransferManager(
         val chunks = buildChunkRecords(transferId, localFile)
         repository.insertFileChunks(chunks)
 
-        scope.launch {
-            sendOfferAndChunks(transfer, localFile)
-        }
+        launchOutgoingTransfer(transfer, localFile)
         return transfer
     }
 
     suspend fun pauseTransfer(transferId: String) {
         pausedTransfers[transferId] = true
+        pendingAcks.entries.filter { it.key.startsWith("$transferId:") }.forEach {
+            pendingAcks.remove(it.key)?.complete(false)
+        }
         val existing = repository.getFileTransferById(transferId) ?: return
         repository.upsertFileTransfer(
             existing.copy(status = "PAUSED", updatedAt = System.currentTimeMillis())
@@ -128,6 +131,9 @@ class FileTransferManager(
 
     suspend fun resumeTransfer(transferId: String) {
         pausedTransfers[transferId] = false
+        pendingAcks.entries.filter { it.key.startsWith("$transferId:") }.forEach {
+            pendingAcks.remove(it.key)?.complete(false)
+        }
         val existing = repository.getFileTransferById(transferId) ?: return
         val file = File(existing.localUriOrPath)
         if (!file.exists()) {
@@ -139,8 +145,32 @@ class FileTransferManager(
         repository.upsertFileTransfer(
             existing.copy(status = "TRANSFERRING", updatedAt = System.currentTimeMillis())
         )
+        launchOutgoingTransfer(existing, file)
+    }
+
+    private fun launchOutgoingTransfer(transfer: FileTransferEntity, file: File) {
         scope.launch {
-            sendOfferAndChunks(existing, file)
+            if (!activeTransfers.add(transfer.transferId)) return@launch
+            try {
+                sendOfferAndChunks(transfer, file)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                repository.logNetworkEvent(
+                    transportType = transfer.transportType,
+                    eventType = "FILE_TX_ERR",
+                    peerId = transfer.peerId,
+                    summary = "File transfer ${transfer.transferId} paused after an error: ${error.message}"
+                )
+                val current = repository.getFileTransferById(transfer.transferId) ?: transfer
+                if (current.status != "VERIFIED") {
+                    repository.upsertFileTransfer(
+                        current.copy(status = "PAUSED", updatedAt = System.currentTimeMillis())
+                    )
+                }
+            } finally {
+                activeTransfers.remove(transfer.transferId)
+            }
         }
     }
 
