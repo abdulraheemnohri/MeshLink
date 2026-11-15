@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.DataInputStream
@@ -28,6 +29,7 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.util.concurrent.ConcurrentHashMap
 import java.net.Socket
 
 class LanMeshTransport(
@@ -49,6 +51,8 @@ class LanMeshTransport(
     private var udpSocket: DatagramSocket? = null
     private var multicastLock: WifiManager.MulticastLock? = null
     private val jobs = mutableListOf<Job>()
+    private val clientSlots = Semaphore(MAX_TCP_CLIENTS)
+    private val rateWindows = ConcurrentHashMap<String, Pair<Long, Int>>()
 
     override suspend fun start() {
         if (isRunning) return
@@ -132,7 +136,17 @@ class LanMeshTransport(
             serverSocket = srv
             while (isRunning) {
                 val client = srv.accept()
-                scope.launch { handleClientSocket(client) }
+                if (!clientSlots.tryAcquire()) {
+                    runCatching { client.close() }
+                    continue
+                }
+                scope.launch {
+                    try {
+                        handleClientSocket(client)
+                    } finally {
+                        clientSlots.release()
+                    }
+                }
             }
         }.onFailure { err ->
             if (isRunning) {
@@ -152,7 +166,8 @@ class LanMeshTransport(
             runCatching {
                 socket.use { s ->
                     s.soTimeout = READ_TIMEOUT_MS
-                    if (!isPrivateIpv4(s.inetAddress.hostAddress.orEmpty()) || !isMeshLocalSocket(s)) {
+                    val remoteIp = s.inetAddress.hostAddress.orEmpty()
+                    if (!isPrivateIpv4(remoteIp) || !isMeshLocalSocket(s) || !allowIncomingPacket(remoteIp)) {
                         DataOutputStream(s.getOutputStream()).apply { writeByte(0); flush() }
                         false
                     } else {
@@ -215,6 +230,22 @@ class LanMeshTransport(
                 _events.emit(TransportEvent.PeerFound(endpoint))
             }
         }
+    }
+
+    @Synchronized
+    private fun allowIncomingPacket(remoteIp: String): Boolean {
+        val now = System.currentTimeMillis()
+        if (rateWindows.size > MAX_RATE_WINDOW_PEERS) {
+            rateWindows.entries.removeIf { now - it.value.first > RATE_WINDOW_MS }
+        }
+        val previous = rateWindows[remoteIp]
+        val next = if (previous == null || now - previous.first >= RATE_WINDOW_MS) {
+            now to 1
+        } else {
+            previous.first to (previous.second + 1)
+        }
+        rateWindows[remoteIp] = next
+        return next.second <= MAX_PACKETS_PER_MINUTE
     }
 
     private fun isMeshLocalSocket(socket: Socket): Boolean {
@@ -293,6 +324,10 @@ class LanMeshTransport(
         private const val BEACON_INTERVAL_MS = 8_000L
         private const val CONNECT_TIMEOUT_MS = 4_000
         private const val READ_TIMEOUT_MS = 10_000
+        private const val MAX_TCP_CLIENTS = 8
+        private const val MAX_PACKETS_PER_MINUTE = 60
+        private const val MAX_RATE_WINDOW_PEERS = 256
+        private const val RATE_WINDOW_MS = 60_000L
         private const val MAX_FRAME_BYTES = 2 * 1024 * 1024
     }
 }
