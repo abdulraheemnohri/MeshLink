@@ -141,15 +141,19 @@ class BleMeshTransport(
     @SuppressLint("MissingPermission")
     override suspend fun stop() {
         isRunning = false
-        if (!HardwareCapabilities.hasBluetoothPermissions(context)) return
+        incomingFrames.clear()
+        discoveredDevices.clear()
+        if (!HardwareCapabilities.hasBluetoothPermissions(context)) {
+            runCatching { gattServer?.close() }
+            gattServer = null
+            return
+        }
         runCatching { scanner?.stopScan(scanCallback) }
         runCatching { advertiser?.stopAdvertising(advertiseCallback) }
         runCatching { gattServer?.close() }
         scanner = null
         advertiser = null
         gattServer = null
-        incomingFrames.clear()
-        discoveredDevices.clear()
     }
 
     @SuppressLint("MissingPermission")
