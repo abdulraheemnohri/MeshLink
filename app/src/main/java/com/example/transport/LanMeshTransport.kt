@@ -24,6 +24,8 @@ import java.io.DataOutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -237,15 +239,42 @@ class LanMeshTransport(
                 put("tcpPort", TCP_PORT)
             }.toString().toByteArray(Charsets.UTF_8)
 
-            DatagramSocket().use { sock ->
-                sock.broadcast = true
-                val packet = DatagramPacket(
-                    beacon,
-                    beacon.size,
-                    InetAddress.getByName("255.255.255.255"),
-                    UDP_PORT
-                )
-                sock.send(packet)
+            val interfaces = NetworkInterface.getNetworkInterfaces()?.asSequence()
+                ?.filter { iface ->
+                    runCatching { iface.isUp && !iface.isLoopback }.getOrDefault(false) &&
+                        MESH_INTERFACE_PREFIXES.any { iface.name.startsWith(it, ignoreCase = true) }
+                }
+                ?.flatMap { iface ->
+                    iface.interfaceAddresses.asSequence().mapNotNull { item ->
+                        val local = item.address
+                        val broadcast = item.broadcast
+                        if (local is Inet4Address && broadcast is Inet4Address && isPrivateIpv4(local.hostAddress.orEmpty())) {
+                            local to broadcast
+                        } else null
+                    }
+                }
+                ?.toList().orEmpty()
+
+            if (interfaces.isEmpty()) {
+                DatagramSocket().use { sock ->
+                    sock.broadcast = true
+                    sock.send(
+                        DatagramPacket(
+                            beacon, beacon.size,
+                            InetAddress.getByName("255.255.255.255"), UDP_PORT
+                        )
+                    )
+                }
+            } else {
+                interfaces.forEach { (localAddress, broadcastAddress) ->
+                    runCatching {
+                        DatagramSocket(null).use { sock ->
+                            sock.broadcast = true
+                            sock.bind(InetSocketAddress(localAddress, 0))
+                            sock.send(DatagramPacket(beacon, beacon.size, broadcastAddress, UDP_PORT))
+                        }
+                    }
+                }
             }
         }
     }
@@ -253,6 +282,7 @@ class LanMeshTransport(
     companion object {
         const val UDP_PORT = 45820
         const val TCP_PORT = 45821
+        private val MESH_INTERFACE_PREFIXES = listOf("wlan", "p2p", "ap", "swlan", "wifi")
         private const val BEACON_INTERVAL_MS = 8_000L
         private const val CONNECT_TIMEOUT_MS = 4_000
         private const val READ_TIMEOUT_MS = 10_000
