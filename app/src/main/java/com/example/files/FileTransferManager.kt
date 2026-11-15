@@ -241,12 +241,13 @@ class FileTransferManager(
 
         val completeAck = CompletableDeferred<Boolean>()
         pendingAcks["${transfer.transferId}:complete"] = completeAck
-        if (withTimeoutOrNull(COMPLETE_TIMEOUT_MS) { completeAck.await() } != true) {
+        val finalResult = withTimeoutOrNull(COMPLETE_TIMEOUT_MS) { completeAck.await() }
+        if (finalResult != true) {
             pendingAcks.remove("${transfer.transferId}:complete")
+            val current = repository.getFileTransferById(transfer.transferId) ?: transfer
             repository.upsertFileTransfer(
-                transfer.copy(
-                    completedChunks = transfer.totalChunks,
-                    status = "TRANSFERRING",
+                current.copy(
+                    status = if (finalResult == false) "FAILED" else "TRANSFERRING",
                     updatedAt = System.currentTimeMillis()
                 )
             )
@@ -270,6 +271,12 @@ class FileTransferManager(
                     pendingAcks.remove("$transferId:complete")?.complete(true)
                 }
                 -1 -> pendingAcks.remove("$transferId:offer")?.complete(true)
+                -3 -> {
+                    repository.upsertFileTransfer(
+                        transfer.copy(status = "FAILED", updatedAt = System.currentTimeMillis())
+                    )
+                    pendingAcks.remove("$transferId:complete")?.complete(false)
+                }
                 else -> if (index in 0 until transfer.totalChunks) {
                     repository.markChunkCompleted(transferId, index)
                     val remaining = repository.getIncompleteChunks(transferId).size
@@ -383,12 +390,15 @@ class FileTransferManager(
                     )
                 )
                 if (verified) sendFileAck(senderId, transferId, -2)
-                else repository.logSecurityEvent(
+                else {
+                    sendFileAck(senderId, transferId, -3)
+                    repository.logSecurityEvent(
                     eventType = "FILE_HASH_FAIL",
                     peerId = senderId,
                     severity = "ALERT",
                     summary = "Final file size/hash verification failed for $transferId"
-                )
+                    )
+                }
             } else {
                 repository.upsertFileTransfer(
                     transfer.copy(
