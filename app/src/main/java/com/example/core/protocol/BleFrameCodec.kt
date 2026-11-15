@@ -44,7 +44,7 @@ object BleFrameCodec {
                 .putShort(index.toShort())
                 .putShort(count.toShort())
                 .putInt(payload.size)
-                .putInt(crc32(chunk))
+                .putInt(crc32(chunk).toInt())
                 .put(chunk)
                 .array()
         }
