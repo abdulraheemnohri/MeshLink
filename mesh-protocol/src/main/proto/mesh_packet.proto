@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package meshlink.protocol;
+
+option java_package = "com.meshlink.protocol.proto";
+option java_outer_classname = "MeshPacketProtos";
+
+message MeshPacketProto {
+  int32 protocol_version = 1;
+  string message_id = 2;
+  string sender_id = 3;
+  string destination_id = 4;
+  string packet_type = 5;
+  int64 created_at = 6;
+  int64 expires_at = 7;
+  int32 hop_limit = 8;
+  int32 hop_count = 9;
+  string routing_strategy = 10;
+  bytes encrypted_payload = 11;
+  string signature = 12;
+  string integrity_hash = 13;
+  repeated string visited_peers = 14;
+  int32 priority = 15;
+  int32 spray_copies = 16;
+  string source_cluster = 17;
+}
