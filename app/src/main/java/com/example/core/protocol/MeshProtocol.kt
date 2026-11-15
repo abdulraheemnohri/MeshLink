@@ -101,7 +101,7 @@ data class MeshPacket(
         }
     }
 
-    fun isExpired(now: Long = System.currentTimeMillis()): Boolean = now > expiresAt
+    fun isExpired(now: Long = System.currentTimeMillis()): Boolean = now >= expiresAt
 }
 
 object MeshPacketCodec {
