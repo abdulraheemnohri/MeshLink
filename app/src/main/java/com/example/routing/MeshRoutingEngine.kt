@@ -699,8 +699,6 @@ class MeshRoutingEngine(
             )
             return
         }
-        rememberPacket(packet.messageId, packet.expiresAt, now)
-
         val senderPeer = repository.getPeerById(packet.senderId)
         if (senderPeer?.blocked == true) {
             repository.logSecurityEvent(
@@ -739,6 +737,7 @@ class MeshRoutingEngine(
                 )
                 return
             }
+            rememberPacket(packet.messageId, packet.expiresAt, now)
             val needsReply = senderPeer == null || senderPeer.signingPublicKey.isBlank()
             repository.upsertDiscoveredPeer(
                 deviceId = packet.senderId,
@@ -792,6 +791,7 @@ class MeshRoutingEngine(
             )
             return
         }
+        rememberPacket(packet.messageId, packet.expiresAt, now)
 
         val isForLocal = packet.destinationId == local.deviceId ||
             packet.destinationId == MeshPacket.BROADCAST_ID
