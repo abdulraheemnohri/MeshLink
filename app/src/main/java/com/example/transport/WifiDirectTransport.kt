@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.DataOutputStream
+import java.io.DataInputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.io.File
@@ -186,6 +187,7 @@ class WifiDirectTransport(
         return withContext(Dispatchers.IO) {
             runCatching {
                 val encoded = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
+                if (encoded.size !in 1..2 * 1024 * 1024) return@withContext false
                 Socket().use { socket ->
                     socket.connect(InetSocketAddress(targetIp, LanMeshTransport.TCP_PORT), 4_000)
                     socket.soTimeout = 10_000
@@ -193,8 +195,8 @@ class WifiDirectTransport(
                     out.writeInt(encoded.size)
                     out.write(encoded)
                     out.flush()
+                    DataInputStream(socket.getInputStream()).readUnsignedByte() == 1
                 }
-                true
             }.onFailure { error ->
                 _events.tryEmit(
                     TransportEvent.Log(
