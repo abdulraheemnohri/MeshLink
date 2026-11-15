@@ -62,10 +62,16 @@ object BleFrameCodec {
             val frameCount: Int,
             val totalLength: Int,
             var lastUpdatedAt: Long,
+            var bufferedBytes: Int,
             val frames: Array<ByteArray?>
         )
 
         private val pending = ConcurrentHashMap<Int, Pending>()
+
+        init {
+            require(maxTransfers in 1..64) { "maxTransfers must be between 1 and 64" }
+            require(transferTimeoutMs > 0L) { "transferTimeoutMs must be positive" }
+        }
 
         @Synchronized
         fun accept(frame: ByteArray): ByteArray? {
@@ -90,7 +96,7 @@ object BleFrameCodec {
                     val oldest = pending.entries.minByOrNull { it.value.lastUpdatedAt }?.key
                     if (oldest != null) pending.remove(oldest)
                 }
-                Pending(count, totalLength, now, arrayOfNulls(count)).also {
+                Pending(count, totalLength, now, 0, arrayOfNulls(count)).also {
                     pending[transferId] = it
                 }
             }
@@ -105,6 +111,16 @@ object BleFrameCodec {
             if (previous != null && !previous.contentEquals(chunk)) {
                 pending.remove(transferId)
                 return null
+            }
+            if (previous == null) {
+                // Bound aggregate buffered bytes, not just each individual frame.
+                // Without this check, a malicious sender can claim a small totalLength
+                // while sending thousands of individually valid, oversized chunks.
+                if (chunk.size > transfer.totalLength - transfer.bufferedBytes) {
+                    pending.remove(transferId)
+                    return null
+                }
+                transfer.bufferedBytes += chunk.size
             }
             transfer.frames[index] = chunk
             if (transfer.frames.any { it == null }) return null
