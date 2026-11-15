@@ -152,7 +152,7 @@ class LanMeshTransport(
             runCatching {
                 socket.use { s ->
                     s.soTimeout = READ_TIMEOUT_MS
-                    if (!isPrivateIpv4(s.inetAddress.hostAddress.orEmpty())) {
+                    if (!isPrivateIpv4(s.inetAddress.hostAddress.orEmpty()) || !isMeshLocalSocket(s)) {
                         DataOutputStream(s.getOutputStream()).apply { writeByte(0); flush() }
                         false
                     } else {
@@ -215,6 +215,13 @@ class LanMeshTransport(
                 _events.emit(TransportEvent.PeerFound(endpoint))
             }
         }
+    }
+
+    private fun isMeshLocalSocket(socket: Socket): Boolean {
+        val interfaceName = runCatching {
+            NetworkInterface.getByInetAddress(socket.localAddress)?.name
+        }.getOrNull() ?: return false
+        return MESH_INTERFACE_PREFIXES.any { interfaceName.startsWith(it, ignoreCase = true) }
     }
 
     private fun isPrivateIpv4(address: String): Boolean {
