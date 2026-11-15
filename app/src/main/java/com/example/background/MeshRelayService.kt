@@ -124,7 +124,7 @@ class MeshRelayService : Service() {
         super.onDestroy()
     }
 
-    private suspend fun stopTransports(container: MeshLinkApplication.Container) {
+    private suspend fun stopTransports(container: AppContainer) {
         runCatching { container.lanTransport.stop() }
         runCatching { container.bleTransport.stop() }
         runCatching { container.wifiDirectTransport.stop() }
