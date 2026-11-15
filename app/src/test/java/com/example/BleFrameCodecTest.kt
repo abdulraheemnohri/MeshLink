@@ -41,6 +41,15 @@ class BleFrameCodecTest {
     }
 
     @Test
+    fun corruptedFrameFailsCrcValidation() {
+        val frames = BleFrameCodec.fragment(ByteArray(120) { it.toByte() }, 64)
+        val corrupted = frames.first().clone()
+        corrupted[corrupted.lastIndex] = (corrupted.last().toInt() xor 0x01).toByte()
+        val reassembler = BleFrameCodec.Reassembler()
+        assertNull(reassembler.accept(corrupted))
+    }
+
+    @Test
     fun malformedFrameIsIgnored() {
         val reassembler = BleFrameCodec.Reassembler()
         assertNull(reassembler.accept(ByteArray(32)))
