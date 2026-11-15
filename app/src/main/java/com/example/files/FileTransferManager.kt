@@ -19,7 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
@@ -58,6 +57,7 @@ class FileTransferManager(
                 if (sizeIdx >= 0) fileSize = cursor.getLong(sizeIdx)
             }
         }
+        fileName = fileName.substringAfterLast('/').substringAfterLast('\\').filter { it.code >= 32 && it != '/' && it != '\\' }.take(120).ifBlank { "received_file" }
         val mimeType = resolver.getType(uri) ?: "application/octet-stream"
 
         // Copy to app-private cache so resumable chunk reads survive URI permission expiration
@@ -78,6 +78,10 @@ class FileTransferManager(
         } ?: return null
 
         val actualSize = localFile.length()
+        if (actualSize > MAX_FILE_BYTES) {
+            localFile.delete()
+            return null
+        }
         if (fileSize <= 0L) fileSize = actualSize
         val fullSha256 = shaDigest.digest().joinToString("") { "%02x".format(it) }
         val totalChunks = ((actualSize + CHUNK_SIZE - 1) / CHUNK_SIZE).toInt().coerceAtLeast(1)
@@ -296,7 +300,7 @@ class FileTransferManager(
                 transferId = transferId,
                 peerId = senderId,
                 peerAlias = peer?.alias ?: senderId,
-                fileName = fileName,
+                fileName = safeName,
                 mimeType = payload.optString("mimeType", "application/octet-stream"),
                 localUriOrPath = destFile.absolutePath,
                 totalBytes = totalBytes,
@@ -314,10 +318,11 @@ class FileTransferManager(
             val index = payload.optInt("index", -1)
             val expectedChunkSha = payload.optString("chunkSha256", "")
             val dataB64 = payload.optString("data", "")
-            if (index !in 0 until transfer.totalChunks || dataB64.isBlank() || dataB64.length > MAX_ENCODED_CHUNK) return
+            if (index !in 0 until transfer.totalChunks || dataB64.length > MAX_ENCODED_CHUNK) return
 
-            val bytes = runCatching { Base64.decode(dataB64, Base64.NO_WRAP) }.getOrNull() ?: return
             val expectedLength = minOf(CHUNK_SIZE.toLong(), (transfer.totalBytes - index.toLong() * CHUNK_SIZE).coerceAtLeast(0L)).toInt()
+            if (expectedLength > 0 && dataB64.isBlank()) return
+            val bytes = runCatching { Base64.decode(dataB64, Base64.NO_WRAP) }.getOrNull() ?: return
             if (bytes.size != expectedLength || expectedChunkSha.length != 64) return
             if (expectedChunkSha.isNotBlank() && crypto.sha256Hex(bytes) != expectedChunkSha) {
                 repository.logSecurityEvent(
