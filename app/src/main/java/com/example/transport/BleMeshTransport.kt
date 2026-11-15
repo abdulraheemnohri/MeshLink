@@ -251,7 +251,7 @@ class BleMeshTransport(
             }
         })
 
-        val delivered = withTimeoutOrNull(30_000L) { resultDeferred.await() } ?: false
+        val delivered = withTimeoutOrNull(180_000L) { resultDeferred.await() } ?: false
         runCatching { gatt?.close() }
         return delivered
     }
