@@ -23,6 +23,30 @@ class BleFrameCodecTest {
     }
 
     @Test
+    fun reassemblyTimeoutRefreshesAsFramesArrive() {
+        var now = 0L
+        val original = ByteArray(120) { it.toByte() }
+        val frames = BleFrameCodec.fragment(original, 64)
+        val reassembler = BleFrameCodec.Reassembler(
+            transferTimeoutMs = 100L,
+            clock = { now }
+        )
+
+        assertNull(reassembler.accept(frames[0]))
+        now = 90L
+        assertNull(reassembler.accept(frames[1]))
+        now = 180L
+        val result = reassembler.accept(frames[2])
+        assertArrayEquals(original, result)
+    }
+
+    @Test
+    fun malformedFrameIsIgnored() {
+        val reassembler = BleFrameCodec.Reassembler()
+        assertNull(reassembler.accept(ByteArray(32)))
+    }
+
+    @Test
     fun incompleteTransferDoesNotEmitPayload() {
         val frames = BleFrameCodec.fragment(ByteArray(500) { it.toByte() }, 64)
         val reassembler = BleFrameCodec.Reassembler()
