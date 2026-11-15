@@ -103,6 +103,7 @@ class LanMeshTransport(
                 val encoded = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
                 if (encoded.size !in 1..MAX_FRAME_BYTES) return@withContext false
                 Socket().use { socket ->
+                    if (!isPrivateIpv4(endpoint.address)) return@withContext false
                     socket.connect(InetSocketAddress(endpoint.address, endpoint.port), CONNECT_TIMEOUT_MS)
                     socket.soTimeout = READ_TIMEOUT_MS
                     val out = DataOutputStream(socket.getOutputStream())
@@ -149,6 +150,10 @@ class LanMeshTransport(
             runCatching {
                 socket.use { s ->
                     s.soTimeout = READ_TIMEOUT_MS
+                    if (!isPrivateIpv4(s.inetAddress.hostAddress.orEmpty())) {
+                        DataOutputStream(s.getOutputStream()).apply { writeByte(0); flush() }
+                        return@use
+                    }
                     val input = DataInputStream(s.getInputStream())
                     val length = input.readInt()
                     var accepted = false
@@ -187,8 +192,10 @@ class LanMeshTransport(
                 sock.receive(dp)
                 val payload = String(dp.data, 0, dp.length, Charsets.UTF_8)
                 val senderIp = dp.address?.hostAddress ?: continue
+                if (!isPrivateIpv4(senderIp)) continue
                 val localId = localIdentityProvider().deviceId
                 val obj = runCatching { JSONObject(payload) }.getOrNull() ?: continue
+                if (obj.optString("proto") != "MLP/1") continue
                 val peerId = obj.optString("id")
                 if (peerId.isBlank() || peerId == localId) continue
                 val endpoint = DiscoveredEndpoint(
@@ -204,6 +211,16 @@ class LanMeshTransport(
                 _events.emit(TransportEvent.PeerFound(endpoint))
             }
         }
+    }
+
+    private fun isPrivateIpv4(address: String): Boolean {
+        val parts = address.split(".").mapNotNull { it.toIntOrNull() }
+        if (parts.size != 4 || parts.any { it !in 0..255 }) return false
+        return parts[0] == 10 ||
+            (parts[0] == 172 && parts[1] in 16..31) ||
+            (parts[0] == 192 && parts[1] == 168) ||
+            (parts[0] == 169 && parts[1] == 254) ||
+            parts[0] == 127
     }
 
     private fun broadcastBeacon() {
