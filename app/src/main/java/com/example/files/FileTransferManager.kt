@@ -147,6 +147,8 @@ class FileTransferManager(
     private suspend fun sendOfferAndChunks(transfer: FileTransferEntity, localFile: File) {
         val local = repository.ensureInitialized()
         val peer = repository.getPeerById(transfer.peerId) ?: return
+        val completeAck = CompletableDeferred<Boolean>()
+        pendingAcks["${transfer.transferId}:complete"] = completeAck
         if (peer.agreementPublicKey.isBlank()) {
             repository.upsertFileTransfer(transfer.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
             return
@@ -177,7 +179,10 @@ class FileTransferManager(
         routingEngine.sendRawSignedPacket(offerPacket)
         if (withTimeoutOrNull(ACK_TIMEOUT_MS) { offerAck.await() } != true) {
             pendingAcks.remove("${transfer.transferId}:offer")
-            repository.upsertFileTransfer(transfer.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
+            val current = repository.getFileTransferById(transfer.transferId) ?: transfer
+            if (current.status != "FAILED") {
+                repository.upsertFileTransfer(current.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
+            }
             return
         }
 
@@ -239,8 +244,6 @@ class FileTransferManager(
             }
         }
 
-        val completeAck = CompletableDeferred<Boolean>()
-        pendingAcks["${transfer.transferId}:complete"] = completeAck
         val finalResult = withTimeoutOrNull(COMPLETE_TIMEOUT_MS) { completeAck.await() }
         if (finalResult != true) {
             pendingAcks.remove("${transfer.transferId}:complete")
@@ -275,6 +278,7 @@ class FileTransferManager(
                     repository.upsertFileTransfer(
                         transfer.copy(status = "FAILED", updatedAt = System.currentTimeMillis())
                     )
+                    pendingAcks.remove("$transferId:offer")?.complete(false)
                     pendingAcks.remove("$transferId:complete")?.complete(false)
                 }
                 else -> if (index in 0 until transfer.totalChunks) {
@@ -328,7 +332,14 @@ class FileTransferManager(
                     existing.totalBytes != totalBytes || existing.totalChunks != totalChunks ||
                     !existing.sha256.equals(expectedHash, true)
                 ) return
-                sendFileAck(senderId, transferId, -1)
+                when (existing.status) {
+                    "VERIFIED" -> {
+                        sendFileAck(senderId, transferId, -1)
+                        sendFileAck(senderId, transferId, -2)
+                    }
+                    "FAILED" -> sendFileAck(senderId, transferId, -3)
+                    else -> sendFileAck(senderId, transferId, -1)
+                }
                 return
             }
             repository.upsertFileTransfer(transfer)
