@@ -4,6 +4,9 @@ import com.example.core.protocol.BleFrameCodec
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.zip.CRC32
 import org.junit.Test
 
 class BleFrameCodecTest {
@@ -50,6 +53,23 @@ class BleFrameCodecTest {
     }
 
     @Test
+    fun rejectsAggregateChunkBytesBeyondDeclaredTransferLength() {
+        val reassembler = BleFrameCodec.Reassembler()
+        val oversizedA = frame(transferId = 991, index = 0, count = 2, totalLength = 100, chunk = ByteArray(100) { 1 })
+        val oversizedB = frame(transferId = 991, index = 1, count = 2, totalLength = 100, chunk = ByteArray(100) { 2 })
+
+        assertNull(reassembler.accept(oversizedA))
+        assertNull(reassembler.accept(oversizedB))
+
+        // A rejected transfer must be discarded, allowing a valid retry with the same ID.
+        val original = ByteArray(100) { it.toByte() }
+        val validA = frame(transferId = 991, index = 0, count = 2, totalLength = 100, chunk = original.copyOfRange(0, 50))
+        val validB = frame(transferId = 991, index = 1, count = 2, totalLength = 100, chunk = original.copyOfRange(50, 100))
+        assertNull(reassembler.accept(validA))
+        assertArrayEquals(original, reassembler.accept(validB))
+    }
+
+    @Test
     fun malformedFrameIsIgnored() {
         val reassembler = BleFrameCodec.Reassembler()
         assertNull(reassembler.accept(ByteArray(32)))
@@ -60,6 +80,26 @@ class BleFrameCodecTest {
         val frames = BleFrameCodec.fragment(ByteArray(500) { it.toByte() }, 64)
         val reassembler = BleFrameCodec.Reassembler()
         frames.dropLast(1).forEach { assertNull(reassembler.accept(it)) }
+    }
+
+    private fun frame(
+        transferId: Int,
+        index: Int,
+        count: Int,
+        totalLength: Int,
+        chunk: ByteArray
+    ): ByteArray {
+        val crc = CRC32().apply { update(chunk) }.value.toInt()
+        return ByteBuffer.allocate(18 + chunk.size)
+            .order(ByteOrder.BIG_ENDIAN)
+            .putShort(0x4D4C.toShort())
+            .putInt(transferId)
+            .putShort(index.toShort())
+            .putShort(count.toShort())
+            .putInt(totalLength)
+            .putInt(crc)
+            .put(chunk)
+            .array()
     }
 
     @Test(expected = IllegalArgumentException::class)
