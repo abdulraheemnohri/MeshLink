@@ -148,6 +148,8 @@ class BleMeshTransport(
         scanner = null
         advertiser = null
         gattServer = null
+        incomingFrames.clear()
+        discoveredDevices.clear()
     }
 
     @SuppressLint("MissingPermission")
@@ -303,7 +305,7 @@ class BleMeshTransport(
                 }
                 if (characteristic.uuid == PACKET_CHAR_UUID && offset == 0 && !preparedWrite) {
                     val reassembler = incomingFrames.getOrPut(device.address) {
-                        BleFrameCodec.Reassembler()
+                        BleFrameCodec.Reassembler(transferTimeoutMs = 180_000L)
                     }
                     val completePayload = reassembler.accept(value)
                     if (completePayload != null) {
