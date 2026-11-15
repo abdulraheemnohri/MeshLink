@@ -41,7 +41,18 @@ class FileTransferManager(
     init {
         scope.launch {
             routingEngine.incomingFilePacket.collect { incoming ->
-                handleIncomingFilePacket(incoming.packet.senderId, incoming.payloadJson)
+                try {
+                    handleIncomingFilePacket(incoming.packet.senderId, incoming.payloadJson)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    repository.logNetworkEvent(
+                        transportType = incoming.packet.packetType.name,
+                        eventType = "FILE_RX_ERR",
+                        peerId = incoming.packet.senderId,
+                        summary = "Rejected file-transfer packet after processing error: ${error.message}"
+                    )
+                }
             }
         }
     }
