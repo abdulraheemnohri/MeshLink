@@ -12,6 +12,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.MeshLinkApplication
+import com.example.di.AppContainer
 import com.example.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,7 +73,7 @@ class MeshRelayService : Service() {
         return START_STICKY
     }
 
-    private fun startMaintenance(container: MeshLinkApplication.Container) {
+    private fun startMaintenance(container: AppContainer) {
         if (maintenanceJob?.isActive == true) return
         maintenanceJob = serviceScope.launch {
             while (isActive && !stopping) {
