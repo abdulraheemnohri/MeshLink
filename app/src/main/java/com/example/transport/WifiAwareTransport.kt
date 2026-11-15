@@ -191,7 +191,7 @@ class WifiAwareTransport(
 
     private fun handleIncomingBytes(peerHandle: PeerHandle, message: ByteArray) {
         val peerKey = peerHandle.hashCode().toString()
-        val reassembler = incomingFrames.getOrPut(peerKey) { BleFrameCodec.Reassembler() }
+        val reassembler = incomingFrames.getOrPut(peerKey) { BleFrameCodec.Reassembler(transferTimeoutMs = 120_000L) }
         val complete = reassembler.accept(message) ?: return
         val packet = MeshPacketCodec.decode(String(complete, Charsets.UTF_8)) ?: return
         peerHandles[packet.senderId] = peerHandle
@@ -213,6 +213,10 @@ class WifiAwareTransport(
             runCatching { subscribeSession?.close() }
             runCatching { session?.close() }
         }
+        pendingSends.values.forEach { it.complete(false) }
+        pendingSends.clear()
+        incomingFrames.clear()
+        peerHandles.clear()
         publishSession = null
         subscribeSession = null
         session = null
