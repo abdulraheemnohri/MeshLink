@@ -45,6 +45,8 @@ class WifiDirectTransport(
         context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
     private var channel: WifiP2pManager.Channel? = null
     private var groupOwnerAddress: String? = null
+    @Volatile private var isGroupOwner: Boolean? = null
+    @Volatile private var groupFormed: Boolean = false
     private var receiverRegistered = false
 
     private val receiver = object : BroadcastReceiver() {
@@ -62,8 +64,10 @@ class WifiDirectTransport(
                 }
                 WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
                     manager?.requestConnectionInfo(channel) { info ->
+                        groupFormed = info.groupFormed
+                        isGroupOwner = if (info.groupFormed) info.isGroupOwner else null
+                        groupOwnerAddress = if (info.groupFormed) info.groupOwnerAddress?.hostAddress else null
                         if (info.groupFormed) {
-                            groupOwnerAddress = info.groupOwnerAddress?.hostAddress
                             _events.tryEmit(
                                 TransportEvent.Log(
                                     transportType = TransportType.WIFI_DIRECT,
@@ -167,7 +171,11 @@ class WifiDirectTransport(
     }
 
     override suspend fun sendPacket(endpoint: DiscoveredEndpoint, packet: MeshPacket): Boolean {
-        val targetIp = groupOwnerAddress ?: endpoint.address
+        // The group-owner address is the reachable TCP server address for group clients.
+        // A group owner must not connect back to its own address to reach a client; client
+        // addressing requires a separately discovered DHCP/client-IP mapping.
+        if (!groupFormed || isGroupOwner != false) return false
+        val targetIp = groupOwnerAddress ?: return false
         if (!targetIp.contains('.')) return false
         return withContext(Dispatchers.IO) {
             runCatching {
@@ -196,7 +204,8 @@ class WifiDirectTransport(
                         signingPublicKey = "",
                         agreementPublicKey = "",
                         transportType = TransportType.WIFI_DIRECT,
-                        address = groupOwnerAddress ?: device.deviceAddress,
+                        // A P2P MAC address is not an IP address and must never be used as one.
+                        address = groupOwnerAddress.orEmpty(),
                         port = LanMeshTransport.TCP_PORT,
                         rssiDbm = -55
                     )
