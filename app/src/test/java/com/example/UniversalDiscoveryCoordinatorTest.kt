@@ -127,6 +127,22 @@ class UniversalDiscoveryCoordinatorTest {
     }
 
     @Test
+    fun authenticatedIdentityReplacesProvisionalTransportAddressForSameEndpoint() = runBlocking<Unit> {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val classic = FakeTransport(TransportType.BLUETOOTH_CLASSIC)
+        val coordinator = UniversalDiscoveryCoordinator(listOf(classic), scope)
+
+        classic.announce(endpoint(TransportType.BLUETOOTH_CLASSIC, "AA:BB:CC:DD:EE:FF", 1_000L).copy(deviceId = "aabbccddeeff"))
+        classic.announce(endpoint(TransportType.BLUETOOTH_CLASSIC, "AA:BB:CC:DD:EE:FF", 2_000L))
+
+        assertTrue(coordinator.endpointsFor("aabbccddeeff").isEmpty())
+        assertEquals(1, coordinator.endpointsFor("peer-1").size)
+        assertEquals("peer-1", coordinator.peers.value.single().deviceId)
+        coordinator.close()
+        scope.coroutineContext[Job]?.cancel()
+    }
+
+    @Test
     fun connectUsesAdapterMatchingEndpointTransport() = runBlocking<Unit> {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val lan = FakeTransport(TransportType.LOCAL_LAN)
