@@ -11,12 +11,15 @@ class HandshakeReplayGuardTest {
     private fun packet(
         id: String = "hello-1",
         createdAt: Long = 100_000L,
-        expiresAt: Long = 160_000L
+        expiresAt: Long = 160_000L,
+        type: PacketType = PacketType.HELLO,
+        version: Int = MeshPacket.PROTOCOL_VERSION
     ) = MeshPacket(
+        protocolVersion = version,
         messageId = id,
         senderId = "peer-a",
         destinationId = MeshPacket.BROADCAST_ID,
-        packetType = PacketType.HELLO,
+        packetType = type,
         createdAt = createdAt,
         expiresAt = expiresAt,
         encryptedPayload = "{}"
@@ -39,9 +42,24 @@ class HandshakeReplayGuardTest {
         assertFalse(guard.accept(packet(createdAt = 200_000L, expiresAt = 260_000L), now = 100_000L))
     }
 
+    @Test fun rejectsNonHelloPackets() {
+        val guard = HandshakeReplayGuard()
+        assertFalse(guard.accept(packet(type = PacketType.MESSAGE), now = 100_000L))
+    }
+
+    @Test fun rejectsUnsupportedProtocolVersions() {
+        val guard = HandshakeReplayGuard()
+        assertFalse(guard.accept(packet(version = MeshPacket.PROTOCOL_VERSION + 1), now = 100_000L))
+    }
+
     @Test fun permitsDistinctFreshHelloIds() {
         val guard = HandshakeReplayGuard()
         assertTrue(guard.accept(packet(id = "hello-a"), now = 100_000L))
         assertTrue(guard.accept(packet(id = "hello-b"), now = 100_000L))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsZeroCapacity() {
+        HandshakeReplayGuard(maxEntries = 0)
     }
 }
