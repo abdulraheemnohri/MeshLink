@@ -107,6 +107,19 @@ class UniversalDiscoveryCoordinator(
     @Synchronized
     private fun record(endpoint: DiscoveredEndpoint) {
         if (endpoint.deviceId.isBlank() || endpoint.address.isBlank()) return
+
+        // A transport may first report a hardware address (for example a bonded
+        // Bluetooth MAC) and later learn the authenticated MeshLink device ID.
+        // Replace the provisional key for the same adapter/address to avoid
+        // showing one physical peer twice in the discovery UI.
+        endpoints.entries.forEach { entry ->
+            if (entry.key != endpoint.deviceId) {
+                entry.value.entries.removeIf { (type, current) ->
+                    type == endpoint.transportType && current.address.equals(endpoint.address, ignoreCase = true)
+                }
+                if (entry.value.isEmpty()) endpoints.remove(entry.key, entry.value)
+            }
+        }
         val peerPaths = endpoints.getOrPut(endpoint.deviceId) { ConcurrentHashMap() }
         val current = peerPaths[endpoint.transportType]
         if (current == null || endpoint.lastSeenAt >= current.lastSeenAt) {
