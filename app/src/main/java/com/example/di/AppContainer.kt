@@ -9,6 +9,7 @@ import com.example.location.LocationSharingManager
 import com.example.routing.MeshRoutingEngine
 import com.example.security.BiometricManager
 import com.example.transport.BleMeshTransport
+import com.example.transport.BluetoothClassicMeshTransport
 import com.example.transport.LanMeshTransport
 import com.example.transport.WifiAwareTransport
 import com.example.transport.WifiDirectTransport
@@ -25,12 +26,13 @@ class AppContainer(context: Context) {
 
     val lanTransport = LanMeshTransport(appContext) { crypto.ensureLocalIdentity() }
     val bleTransport = BleMeshTransport(appContext) { crypto.ensureLocalIdentity() }
+    val bluetoothClassicTransport = BluetoothClassicMeshTransport(appContext) { crypto.ensureLocalIdentity() }
     val wifiDirectTransport = WifiDirectTransport(appContext)
     val wifiAwareTransport = WifiAwareTransport(appContext) { crypto.ensureLocalIdentity() }
 
     val routingEngine = MeshRoutingEngine(appContext, repository, crypto).apply {
         registerTransports(
-            listOf(lanTransport, wifiDirectTransport, wifiAwareTransport, bleTransport)
+            listOf(lanTransport, wifiDirectTransport, wifiAwareTransport, bleTransport, bluetoothClassicTransport)
         )
     }
 
