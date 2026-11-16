@@ -293,14 +293,15 @@ class BluetoothClassicMeshTransport(
         )
         val bytes = MeshPacketCodec.encode(signed).toByteArray(Charsets.UTF_8)
         if (bytes.size !in 1..MAX_FRAME_BYTES) return
+        if (phase == "challenge") {
+            // Publish the expected proof before writing: the peer may respond immediately.
+            outstandingChallenges[socket] = signed.messageId to nonce
+        }
         val output = DataOutputStream(socket.outputStream)
         synchronized(output) {
             output.writeInt(bytes.size)
             output.write(bytes)
             output.flush()
-        }
-        if (phase == "challenge") {
-            outstandingChallenges[socket] = signed.messageId to nonce
         }
     }
 
