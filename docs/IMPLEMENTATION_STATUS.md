@@ -105,3 +105,8 @@ NFC identity URI import is wired through the existing NDEF_DISCOVERED intent han
 - A disconnect removes only the endpoint for that transport; other paths to the peer remain available.
 - Strict Only mode never sends through a transport outside the configured preference set.
 - This implements sequential failover, not simultaneous link aggregation. It does not imply Bluetooth Classic, Nearby Connections, NFC data transport, cellular or satellite adapters are implemented.
+
+
+## Transport policy correctness hardening
+
+The routing dispatcher now treats `ONLY` as a strict single-path mode: even when the persisted fallback toggle is true, it attempts only the highest-ranked selected transport. `PREFER` and `AUTOMATIC` continue to honor the fallback toggle. The policy rule is centralized in `TransportPolicy.permitsFallback()` and covered by unit tests. This is a source-level fix; CI and physical-device delivery still need to pass before claiming verified behavior.
