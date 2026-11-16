@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.core.permissions.HardwareCapabilityReport
+import com.example.core.permissions.HardwareCapabilities
 import com.example.core.protocol.RoutingStrategy
 import com.example.core.protocol.TransportType
 import com.example.transport.TransportPolicy
@@ -510,6 +513,10 @@ fun DiagnosticsScreen(
     onRunLoopbackTest: () -> Unit,
     onClearLogs: () -> Unit
 ) {
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { onRefreshCapabilities() }
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier
@@ -544,6 +551,17 @@ fun DiagnosticsScreen(
                     CapabilityRow("Foreground Relay", isRelayRunning, if (isRelayRunning) "Running" else "Stopped")
 
                     Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = {
+                            permissionLauncher.launch(HardwareCapabilities.transportRuntimePermissions().toTypedArray())
+                        },
+                        modifier = Modifier.fillMaxWidth().height(46.dp)
+                    ) {
+                        Icon(Icons.Filled.Security, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Grant Bluetooth & Nearby Wi-Fi Permissions")
+                    }
+
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = onRunLoopbackTest,
