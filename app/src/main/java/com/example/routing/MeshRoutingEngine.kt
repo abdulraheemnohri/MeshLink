@@ -52,6 +52,7 @@ class MeshRoutingEngine(
     private val activeEndpoints = ConcurrentHashMap<String, DiscoveredEndpoint>()
     private val seenPacketCache = ConcurrentHashMap<String, Long>()
     private val transports = mutableListOf<MeshTransport>()
+    private val transportPolicy = com.example.transport.TransportPolicyManager(context)
 
     private val _incomingVoice = MutableSharedFlow<VoiceIncomingClip>(extraBufferCapacity = 16)
     val incomingVoice: SharedFlow<VoiceIncomingClip> = _incomingVoice.asSharedFlow()
@@ -471,6 +472,17 @@ class MeshRoutingEngine(
         val now = System.currentTimeMillis()
         if (packet.isExpired(now) || packet.hopLimit < 0) return false
         rememberPacket(packet.messageId, packet.expiresAt, now)
+        val localIdentity = repository.ensureInitialized()
+        if (packet.destinationId == localIdentity.deviceId) {
+            repository.updateMessageStatus(packet.messageId, "DELIVERED", null, packet.hopCount)
+            repository.logNetworkEvent(
+                transportType = "LOCAL",
+                eventType = "TX_LOOPBACK",
+                peerId = localIdentity.deviceId,
+                summary = "Delivered packet locally without opening a radio connection"
+            )
+            return true
+        }
         val directEndpoint = activeEndpoints[packet.destinationId]
 
         if (directEndpoint != null) {
@@ -1087,15 +1099,22 @@ class MeshRoutingEngine(
     }
 
     private suspend fun sendOverBestTransport(endpoint: DiscoveredEndpoint, packet: MeshPacket): Boolean {
-        val preferred = transports.firstOrNull { it.transportType == endpoint.transportType }
+        val policy = transportPolicy.load()
+        if (endpoint.transportType in policy.disabled) return false
+        if (policy.mode == com.example.transport.TransportSelectionMode.ONLY &&
+            endpoint.transportType !in policy.preferred) return false
+        if (policy.mode == com.example.transport.TransportSelectionMode.PREFER &&
+            !policy.allowFallback && endpoint.transportType !in policy.preferred) return false
+        val preferred = transports.firstOrNull { it.transportType == endpoint.transportType && it.isRunning }
         if (preferred != null && preferred.sendPacket(endpoint, packet)) {
             return true
         }
-        for (t in transports) {
-            if (t.transportType != endpoint.transportType && t.sendPacket(endpoint, packet)) {
-                return true
-            }
+        if (policy.mode == com.example.transport.TransportSelectionMode.ONLY || !policy.allowFallback) {
+            return false
         }
+        // Do not pass an endpoint locator to a different radio adapter: BLE MACs,
+        // LAN IPs and Wi-Fi Direct addresses are not interchangeable.
+        
         return false
     }
 
