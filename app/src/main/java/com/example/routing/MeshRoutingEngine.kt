@@ -49,7 +49,9 @@ class MeshRoutingEngine(
     private val crypto: MeshCryptoEngine
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Keep every transport-specific locator for a peer; adapter addresses are not interchangeable.
     private val activeEndpoints = ConcurrentHashMap<String, DiscoveredEndpoint>()
+    private val endpointPaths = ConcurrentHashMap<String, ConcurrentHashMap<TransportType, DiscoveredEndpoint>>()
     private val seenPacketCache = ConcurrentHashMap<String, Long>()
     private val transports = mutableListOf<MeshTransport>()
     private val transportPolicy = com.example.transport.TransportPolicyManager(context)
@@ -630,12 +632,8 @@ class MeshRoutingEngine(
         when (event) {
             is TransportEvent.PeerFound -> {
                 val ep = event.endpoint
-                val existing = activeEndpoints[ep.deviceId]
-                val best = if (existing != null && existing.transportType.ordinal < ep.transportType.ordinal) {
-                    existing
-                } else {
-                    ep
-                }
+                endpointPaths.getOrPut(ep.deviceId) { ConcurrentHashMap() }[ep.transportType] = ep
+                val best = selectPreferredEndpoint(ep.deviceId) ?: ep
                 activeEndpoints[ep.deviceId] = best
                 val peer = repository.upsertDiscoveredPeer(
                     deviceId = ep.deviceId,
@@ -676,8 +674,15 @@ class MeshRoutingEngine(
                     )
                     flushStoreAndForwardQueue()
                 } else {
-                    activeEndpoints.remove(event.peerId)
-                    repository.markPeerDisconnected(event.peerId)
+                    endpointPaths[event.peerId]?.remove(event.transportType)
+                    val remaining = selectPreferredEndpoint(event.peerId)
+                    if (remaining != null) {
+                        activeEndpoints[event.peerId] = remaining
+                    } else {
+                        endpointPaths.remove(event.peerId)
+                        activeEndpoints.remove(event.peerId)
+                        repository.markPeerDisconnected(event.peerId)
+                    }
                 }
             }
 
@@ -775,7 +780,8 @@ class MeshRoutingEngine(
                 } else 0,
                 rssiDbm = -60
             )
-            activeEndpoints[packet.senderId] = handshakeEndpoint
+            endpointPaths.getOrPut(packet.senderId) { ConcurrentHashMap() }[transportType] = handshakeEndpoint
+            activeEndpoints[packet.senderId] = selectPreferredEndpoint(packet.senderId) ?: handshakeEndpoint
             if (needsReply) {
                 // Complete the handshake in both directions so each side learns the other's
                 // stable application identity, not only a transport-level MAC address.
@@ -1098,23 +1104,56 @@ class MeshRoutingEngine(
         dispatchPacket(ackPacket)
     }
 
+    private fun selectPreferredEndpoint(peerId: String): DiscoveredEndpoint? {
+        val policy = transportPolicy.load()
+        val preference = policy.preferred.withIndex().associate { it.value to it.index }
+        return endpointPaths[peerId]?.values
+            ?.filter { it.transportType !in policy.disabled }
+            ?.filter { ep -> transports.any { it.transportType == ep.transportType && it.isRunning } }
+            ?.filter { policy.mode != com.example.transport.TransportSelectionMode.ONLY || it.transportType in policy.preferred }
+            ?.minWithOrNull(
+                compareBy<DiscoveredEndpoint> { preference[it.transportType] ?: Int.MAX_VALUE }
+                    .thenByDescending { it.rssiDbm }
+                    .thenByDescending { it.lastSeenAt }
+            )
+    }
+
     private suspend fun sendOverBestTransport(endpoint: DiscoveredEndpoint, packet: MeshPacket): Boolean {
         val policy = transportPolicy.load()
-        if (endpoint.transportType in policy.disabled) return false
-        if (policy.mode == com.example.transport.TransportSelectionMode.ONLY &&
-            endpoint.transportType !in policy.preferred) return false
-        if (policy.mode == com.example.transport.TransportSelectionMode.PREFER &&
-            endpoint.transportType !in policy.preferred) return false
-        val preferred = transports.firstOrNull { it.transportType == endpoint.transportType && it.isRunning }
-        if (preferred != null && preferred.sendPacket(endpoint, packet)) {
-            return true
+        val packetSize = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8).size
+        val candidates = (endpointPaths[endpoint.deviceId]?.values?.toList().orEmpty() + endpoint)
+            .distinctBy { it.transportType }
+            .filter { it.transportType !in policy.disabled }
+            .filter { ep -> transports.any { it.transportType == ep.transportType && it.isRunning } }
+            .filter { packetSize <= it.transportType.maxPayloadBytes }
+            .filter {
+                policy.mode != com.example.transport.TransportSelectionMode.ONLY ||
+                    it.transportType in policy.preferred
+            }
+            .filter {
+                policy.mode != com.example.transport.TransportSelectionMode.PREFER ||
+                    policy.allowFallback || it.transportType in policy.preferred
+            }
+
+        if (candidates.isEmpty()) return false
+        val preference = policy.preferred.withIndex().associate { it.value to it.index }
+        val ordered = candidates.sortedWith(
+            compareBy<DiscoveredEndpoint> { preference[it.transportType] ?: Int.MAX_VALUE }
+                .thenByDescending { it.rssiDbm }
+                .thenByDescending { it.lastSeenAt }
+        )
+        val attempts = if (!policy.allowFallback) ordered.take(1) else ordered
+
+        // Each adapter receives only the locator discovered by that same adapter.
+        for (candidate in attempts) {
+            val adapter = transports.firstOrNull {
+                it.transportType == candidate.transportType && it.isRunning
+            } ?: continue
+            if (runCatching { adapter.sendPacket(candidate, packet) }.getOrDefault(false)) {
+                activeEndpoints[candidate.deviceId] = candidate
+                return true
+            }
         }
-        if (policy.mode == com.example.transport.TransportSelectionMode.ONLY || !policy.allowFallback) {
-            return false
-        }
-        // Do not pass an endpoint locator to a different radio adapter: BLE MACs,
-        // LAN IPs and Wi-Fi Direct addresses are not interchangeable.
-        
         return false
     }
 
