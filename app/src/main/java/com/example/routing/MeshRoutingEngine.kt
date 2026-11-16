@@ -633,6 +633,20 @@ class MeshRoutingEngine(
         when (event) {
             is TransportEvent.PeerFound -> {
                 val ep = event.endpoint
+                // Bonded Bluetooth devices are not automatically MeshLink identities.
+                // RFCOMM discovery currently has no authenticated identity handshake,
+                // so never create a trusted peer or route from its MAC-derived ID.
+                if (ep.transportType == TransportType.BLUETOOTH_CLASSIC &&
+                    (ep.signingPublicKey.isBlank() || ep.agreementPublicKey.isBlank())
+                ) {
+                    repository.logNetworkEvent(
+                        transportType = ep.transportType.name,
+                        eventType = "IDENTITY_PENDING",
+                        peerId = ep.deviceId,
+                        summary = "Bonded Bluetooth device found; MeshLink identity exchange is required before peer registration"
+                    )
+                    return
+                }
                 endpointPaths.getOrPut(ep.deviceId) { ConcurrentHashMap() }[ep.transportType] = ep
                 val best = selectPreferredEndpoint(ep.deviceId) ?: ep
                 activeEndpoints[ep.deviceId] = best
