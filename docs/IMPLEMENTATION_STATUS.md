@@ -95,3 +95,13 @@ No release should be described as production-ready until the build, unit tests, 
 The persisted Automatic / Prefer / Only transport policy is now exposed in Settings and ViewModel. The packet dispatcher enforces disabled transport preferences and strict Only mode. It avoids cross-adapter fallback using an incompatible endpoint locator. Same-device destinations are handled as local loopback delivery without a radio. Unit tests cover persistence, strict mode, preference ranking, disabled transports, payload limits and fallback control.
 
 NFC identity URI import is wired through the existing NDEF_DISCOVERED intent handler. This is bootstrap only; Android Beam is deprecated/removed on modern Android and no arbitrary NFC phone-to-phone data transport is claimed. Bluetooth Classic RFCOMM and Google Nearby Connections remain unregistered adapters and must not be presented as operational.
+
+
+## Multi-path transport failover update
+
+- The routing engine stores one endpoint per peer per transport, preserving LAN, Wi-Fi Direct, Wi-Fi Aware and BLE locators independently.
+- Direct packet sends rank the peer's live endpoints using the saved transport preference, signal strength and adapter availability.
+- Failed sends can retry a different discovered endpoint for the same peer when fallback is enabled and packet-size limits permit it.
+- A disconnect removes only the endpoint for that transport; other paths to the peer remain available.
+- Strict Only mode never sends through a transport outside the configured preference set.
+- This implements sequential failover, not simultaneous link aggregation. It does not imply Bluetooth Classic, Nearby Connections, NFC data transport, cellular or satellite adapters are implemented.
