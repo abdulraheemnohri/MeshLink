@@ -132,3 +132,13 @@ NFC is for short-range identity/bootstrap handoff, not continuous mesh data tran
 - This panel reports discovery observations only; it does not imply that a peer is authenticated, connected, or currently reachable. Existing peer connection and trust state remain separate.
 - CI previously compiled the debug APK but rejected `UniversalDiscoveryCoordinatorTest` as an invalid JUnit test class. The test coroutine result type was made explicit with `runBlocking<Unit>`; the resulting workflow is being re-checked.
 - Device-level validation is still required for LAN, BLE, Wi-Fi Direct, and Wi-Fi Aware radios, especially Android permission and background restrictions.
+
+
+## Bluetooth Classic transport controls (2026-11-17)
+
+- Added a persisted `bluetoothClassicEnabled` setting, defaulting to off so RFCOMM does not start without an explicit user choice.
+- Added a Room 3→4 migration that adds the setting with a false default, preserving existing local settings and data.
+- Added a Bluetooth Classic RFCOMM toggle under Active Transports & Relay Service. The description clarifies that this implementation targets already-bonded devices and requires Android Nearby Devices permission; it does not silently pair or make the phone discoverable.
+- Relay startup now includes Bluetooth Classic only when enabled. When radio settings change while relay is running, the ViewModel stops disabled adapters, starts enabled adapters, and triggers discovery without restarting the foreground service.
+- The Universal Network Manager now describes Bluetooth Classic as a registered adapter; NFC and QR remain identity/bootstrap mechanisms, not packet transports.
+- Device validation remains necessary: confirm Bluetooth permission grants, bonded-device discovery, RFCOMM connection, mutual identity proof, and radio shutdown on supported Android versions.
