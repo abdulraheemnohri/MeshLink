@@ -83,6 +83,7 @@ fun DiscoverScreen(
     discoveredEndpoints: List<DiscoveredEndpoint> = emptyList(),
     onScanNow: () -> Unit,
     onConnectPeer: (PeerEntity) -> Unit,
+    onConnectEndpoint: (DiscoveredEndpoint) -> Unit = {},
     onOpenChat: (String) -> Unit,
     onImportPeerUri: (String) -> Unit
 ) {
@@ -157,11 +158,21 @@ fun DiscoverScreen(
                                 paths.sortedBy { it.transportType.name }.forEach { path ->
                                     val endpointLabel = if (path.port > 0) "${path.address}:${path.port}" else path.address
                                     val ageSeconds = ((System.currentTimeMillis() - path.lastSeenAt).coerceAtLeast(0L) / 1_000L)
-                                    Text(
-                                        text = "${path.transportType.name}  •  ${endpointLabel}  •  seen ${ageSeconds}s ago",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "${path.transportType.name}  •  ${endpointLabel}  •  seen ${ageSeconds}s ago",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (path.transportType == com.example.core.protocol.TransportType.BLUETOOTH_CLASSIC) {
+                                            TextButton(onClick = { onConnectEndpoint(path) }) { Text("Connect") }
+                                        }
+                                    }
                                 }
                             }
                         }
