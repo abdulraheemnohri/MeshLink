@@ -1167,7 +1167,7 @@ class MeshRoutingEngine(
                 .thenByDescending { it.rssiDbm }
                 .thenByDescending { it.lastSeenAt }
         )
-        val attempts = if (!policy.allowFallback) ordered.take(1) else ordered
+        val attempts = if (!policy.permitsFallback()) ordered.take(1) else ordered
 
         // Each adapter receives only the locator discovered by that same adapter.
         for (candidate in attempts) {
