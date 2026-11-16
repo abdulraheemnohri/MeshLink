@@ -82,7 +82,11 @@ class UniversalDiscoveryCoordinator(
     @Synchronized
     fun pruneExpired(now: Long = System.currentTimeMillis()) {
         endpoints.entries.forEach { peer ->
-            peer.value.entries.removeAll { it.value.lastSeenAt < now - staleAfterMs }
+            peer.value.entries.forEach { endpoint ->
+                if (endpoint.value.lastSeenAt < now - staleAfterMs) {
+                    peer.value.remove(endpoint.key, endpoint.value)
+                }
+            }
             if (peer.value.isEmpty()) endpoints.remove(peer.key, peer.value)
         }
         publish()
@@ -105,7 +109,7 @@ class UniversalDiscoveryCoordinator(
     }
 
     fun close() {
-        collectors.forEach(Job::cancel)
+        collectors.forEach { it.cancel() }
         collectors.clear()
         endpoints.clear()
         publish()
