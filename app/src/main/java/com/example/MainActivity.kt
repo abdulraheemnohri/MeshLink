@@ -2,6 +2,7 @@ package com.example
 
 import android.content.Intent
 import android.nfc.NfcAdapter
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -30,7 +31,13 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIncomingIntent(intent: Intent?) {
         if (intent == null) return
-        val ndefMessage = intent.getParcelableExtra(android.nfc.NfcAdapter.EXTRA_NDEF_MESSAGES, android.nfc.NdefMessage::class.java)
+        val ndefMessage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES, android.nfc.NdefMessage::class.java)
+                ?.firstOrNull()
+        } else {
+            @Suppress("DEPRECATION")
+            (intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)?.firstOrNull() as? android.nfc.NdefMessage)
+        }
         val peerUri = NfcPeerExchange.extractPeerUri(intent.action, intent.dataString, ndefMessage)
         if (peerUri != null) viewModel.importPeerFromUri(peerUri)
     }
