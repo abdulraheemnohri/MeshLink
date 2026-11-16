@@ -21,7 +21,8 @@ import org.junit.Test
 class UniversalDiscoveryCoordinatorTest {
     private class FakeTransport(
         override val transportType: TransportType,
-        var failStart: Boolean = false
+        var failStart: Boolean = false,
+        var connectResult: Boolean = true
     ) : MeshTransport {
         private val mutableEvents = MutableSharedFlow<TransportEvent>(extraBufferCapacity = 16)
         override val events = mutableEvents
@@ -43,6 +44,12 @@ class UniversalDiscoveryCoordinatorTest {
 
         override suspend fun triggerDiscovery() {
             check(isRunning) { "transport is stopped" }
+        }
+
+        var connectCalls = 0
+        override suspend fun connect(endpoint: DiscoveredEndpoint): Boolean {
+            connectCalls++
+            return connectResult
         }
 
         override suspend fun sendPacket(endpoint: DiscoveredEndpoint, packet: MeshPacket): Boolean = false
@@ -115,6 +122,24 @@ class UniversalDiscoveryCoordinatorTest {
         coordinator.stop(setOf(TransportType.LOCAL_LAN))
         assertFalse(lan.isRunning)
         assertFalse(ble.isRunning)
+        coordinator.close()
+        scope.coroutineContext[Job]?.cancel()
+    }
+
+    @Test
+    fun connectUsesAdapterMatchingEndpointTransport() = runBlocking<Unit> {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val lan = FakeTransport(TransportType.LOCAL_LAN)
+        val classic = FakeTransport(TransportType.BLUETOOTH_CLASSIC)
+        val coordinator = UniversalDiscoveryCoordinator(listOf(lan, classic), scope)
+        val endpoint = endpoint(TransportType.BLUETOOTH_CLASSIC, "AA:BB:CC:DD:EE:FF", 1_000L)
+
+        val result = coordinator.connect(endpoint)
+
+        assertTrue(result.isSuccess)
+        assertTrue(result.getOrThrow())
+        assertEquals(0, lan.connectCalls)
+        assertEquals(1, classic.connectCalls)
         coordinator.close()
         scope.coroutineContext[Job]?.cancel()
     }
