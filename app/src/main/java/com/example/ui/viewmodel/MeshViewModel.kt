@@ -187,6 +187,25 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun connectEndpoint(endpoint: DiscoveredEndpoint) {
+        viewModelScope.launch {
+            val result = container.discoveryCoordinator.connect(endpoint)
+            val connected = result.getOrDefault(false)
+            if (connected) {
+                repository.logNetworkEvent(
+                    transportType = endpoint.transportType.name,
+                    eventType = "CONNECT_AUTHENTICATED",
+                    peerId = endpoint.deviceId,
+                    summary = "Authenticated RFCOMM session established with " + endpoint.alias
+                )
+            }
+            val message = if (connected) "Authenticated connection established with " + endpoint.alias
+                else if (result.isFailure) "Connection failed: " + (result.exceptionOrNull()?.message ?: "adapter error")
+                else "Could not authenticate " + endpoint.alias + "; check that both devices run MeshLink"
+            _snackMessages.tryEmit(message)
+        }
+    }
+
     fun connectPeer(peer: PeerEntity) {
         viewModelScope.launch {
             val ep = routingEngine.getDiscoveredEndpoints().firstOrNull { it.deviceId == peer.deviceId }
