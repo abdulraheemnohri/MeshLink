@@ -12,6 +12,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 
+data class TransportHealthSnapshot(
+    val transportType: TransportType,
+    val running: Boolean,
+    val lastStartedAt: Long? = null,
+    val lastDiscoveryAt: Long? = null,
+    val lastError: String? = null
+)
+
 /**
  * Coordinates discovery across registered adapters without assuming that every
  * TransportType has an implementation. Peer identity is the deduplication key;
@@ -25,6 +33,9 @@ class UniversalDiscoveryCoordinator(
     private val adapters = transports.distinctBy { it.transportType }
     private val endpoints = ConcurrentHashMap<String, ConcurrentHashMap<TransportType, DiscoveredEndpoint>>()
     private val collectors = mutableListOf<Job>()
+    private val health = ConcurrentHashMap<TransportType, TransportHealthSnapshot>()
+    private val _transportHealth = MutableStateFlow<List<TransportHealthSnapshot>>(emptyList())
+    val transportHealth: StateFlow<List<TransportHealthSnapshot>> = _transportHealth.asStateFlow()
 
     private val _peers = MutableStateFlow<List<DiscoveredEndpoint>>(emptyList())
     val peers: StateFlow<List<DiscoveredEndpoint>> = _peers.asStateFlow()
@@ -35,6 +46,7 @@ class UniversalDiscoveryCoordinator(
     init {
         require(staleAfterMs > 0L) { "Stale timeout must be positive" }
         adapters.forEach { adapter ->
+            health[adapter.transportType] = TransportHealthSnapshot(adapter.transportType, adapter.isRunning)
             collectors += scope.launch {
                 adapter.events.collect { event ->
                     when (event) {
@@ -49,6 +61,7 @@ class UniversalDiscoveryCoordinator(
                 }
             }
         }
+        publishHealth()
     }
 
     suspend fun startAll(): Map<TransportType, Result<Unit>> = start(adapters.map { it.transportType }.toSet())
@@ -57,8 +70,16 @@ class UniversalDiscoveryCoordinator(
     suspend fun start(types: Set<TransportType>): Map<TransportType, Result<Unit>> {
         val results = linkedMapOf<TransportType, Result<Unit>>()
         adapters.filter { it.transportType in types }.forEach { adapter ->
-            results[adapter.transportType] = runCatching { adapter.start() }
+            val result = runCatching { adapter.start() }
+            results[adapter.transportType] = result
+            val previous = health[adapter.transportType] ?: TransportHealthSnapshot(adapter.transportType, false)
+            health[adapter.transportType] = previous.copy(
+                running = adapter.isRunning,
+                lastStartedAt = if (result.isSuccess) System.currentTimeMillis() else previous.lastStartedAt,
+                lastError = result.exceptionOrNull()?.message
+            )
         }
+        publishHealth()
         return results
     }
 
@@ -72,8 +93,16 @@ class UniversalDiscoveryCoordinator(
     suspend fun discoverAll(): Map<TransportType, Result<Unit>> {
         val results = linkedMapOf<TransportType, Result<Unit>>()
         adapters.filter { it.isRunning }.forEach { adapter ->
-            results[adapter.transportType] = runCatching { adapter.triggerDiscovery() }
+            val result = runCatching { adapter.triggerDiscovery() }
+            results[adapter.transportType] = result
+            val previous = health[adapter.transportType] ?: TransportHealthSnapshot(adapter.transportType, adapter.isRunning)
+            health[adapter.transportType] = previous.copy(
+                running = adapter.isRunning,
+                lastDiscoveryAt = if (result.isSuccess) System.currentTimeMillis() else previous.lastDiscoveryAt,
+                lastError = result.exceptionOrNull()?.message
+            )
         }
+        publishHealth()
         pruneExpired()
         return results
     }
@@ -83,8 +112,15 @@ class UniversalDiscoveryCoordinator(
     suspend fun stop(types: Set<TransportType>): Map<TransportType, Result<Unit>> {
         val results = linkedMapOf<TransportType, Result<Unit>>()
         adapters.filter { it.transportType in types }.forEach { adapter ->
-            results[adapter.transportType] = runCatching { adapter.stop() }
+            val result = runCatching { adapter.stop() }
+            results[adapter.transportType] = result
+            val previous = health[adapter.transportType] ?: TransportHealthSnapshot(adapter.transportType, adapter.isRunning)
+            health[adapter.transportType] = previous.copy(
+                running = adapter.isRunning,
+                lastError = result.exceptionOrNull()?.message
+            )
         }
+        publishHealth()
         return results
     }
 
@@ -128,6 +164,14 @@ class UniversalDiscoveryCoordinator(
         publish()
     }
 
+    private fun publishHealth() {
+        _transportHealth.value = adapters.map { adapter ->
+            val snapshot = health[adapter.transportType]
+                ?: TransportHealthSnapshot(adapter.transportType, adapter.isRunning)
+            snapshot.copy(running = adapter.isRunning)
+        }.sortedBy { it.transportType.name }
+    }
+
     private fun publish() {
         _peers.value = endpoints.values.flatMap { it.values }
             .sortedWith(compareBy<DiscoveredEndpoint> { it.deviceId }.thenBy { it.transportType.name })
@@ -138,6 +182,7 @@ class UniversalDiscoveryCoordinator(
         collectors.clear()
         endpoints.clear()
         publish()
+        publishHealth()
     }
 
     companion object {
