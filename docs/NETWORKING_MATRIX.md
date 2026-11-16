@@ -167,3 +167,11 @@ This reduces replay risk during process lifetime. A fresh nonce challenge/respon
 The RFCOMM identity gate now treats a signed HELLO as a public-key claim only. After validating the HELLO signature, fingerprint, device-ID binding, integrity hash and freshness, each side sends a fresh 256-bit random challenge signed with its own MeshLink identity. The receiving side verifies the challenge against the signing key bound to that socket and returns a signed response containing the nonce and challenge-frame ID. A socket is marked authenticated only after its outstanding challenge is answered correctly; data received earlier remains blocked. Challenge and response frames use the same expiry and bounded replay guard as HELLO frames.
 
 This proves live possession of the claimed long-term signing key and makes captured HELLOs alone insufficient to open the data gate. It does **not** yet establish an ephemeral ECDH session key or provide forward secrecy; payload encryption and session-key rotation remain separate work. Two-physical-device interoperability testing is still required before describing RFCOMM as production-ready.
+
+
+### Bluetooth Classic (RFCOMM)
+
+- Status: implemented adapter, opt-in settings, bonded-device discovery, authenticated explicit connect, and packet framing.
+- Pairing: performed by Android system settings; MeshLink does not silently pair or enable discoverability.
+- Security: signed MeshLink identity hello plus fresh nonce challenge/response before the transport reports connected.
+- Limitation: requires both phones to have Bluetooth enabled, Nearby Devices permissions granted, and devices paired/bonded at OS level. Validate on physical devices before production release.
