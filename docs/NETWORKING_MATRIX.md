@@ -160,3 +160,10 @@ RFCOMM now tracks authentication per live socket. Data packets are delivered to 
 Signed HELLO frames must now pass signature verification, a required integrity-hash comparison, a 60-second creation-time window, expiry checks and a bounded in-memory message-ID replay cache before the peer is accepted. The cache retains up to 2,048 recent IDs and prunes entries older than two minutes. Unit tests cover duplicate IDs, expired/stale messages, future timestamps and distinct fresh handshakes.
 
 This reduces replay risk during process lifetime. A fresh nonce challenge/response and ephemeral ECDH-derived session keys are still required for a production forward-secret channel; clock-based freshness alone is not a substitute.
+
+
+## RFCOMM signed nonce challenge/response
+
+The RFCOMM identity gate now treats a signed HELLO as a public-key claim only. After validating the HELLO signature, fingerprint, device-ID binding, integrity hash and freshness, each side sends a fresh 256-bit random challenge signed with its own MeshLink identity. The receiving side verifies the challenge against the signing key bound to that socket and returns a signed response containing the nonce and challenge-frame ID. A socket is marked authenticated only after its outstanding challenge is answered correctly; data received earlier remains blocked. Challenge and response frames use the same expiry and bounded replay guard as HELLO frames.
+
+This proves live possession of the claimed long-term signing key and makes captured HELLOs alone insufficient to open the data gate. It does **not** yet establish an ephemeral ECDH session key or provide forward secrecy; payload encryption and session-key rotation remain separate work. Two-physical-device interoperability testing is still required before describing RFCOMM as production-ready.
