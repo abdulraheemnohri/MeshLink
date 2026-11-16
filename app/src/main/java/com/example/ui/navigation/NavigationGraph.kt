@@ -40,6 +40,7 @@ fun NavigationGraph(
 ) {
     val identity by viewModel.identity.collectAsStateWithLifecycle()
     val peers by viewModel.peers.collectAsStateWithLifecycle()
+    val discoveredEndpoints by viewModel.discoveredEndpoints.collectAsStateWithLifecycle()
     val connections by viewModel.connections.collectAsStateWithLifecycle()
     val allMessages by viewModel.allMessages.collectAsStateWithLifecycle()
     val groups by viewModel.groups.collectAsStateWithLifecycle()
@@ -114,6 +115,7 @@ fun NavigationGraph(
         composable(MeshRoute.DISCOVERY) {
             DiscoverScreen(
                 peers = peers,
+                discoveredEndpoints = discoveredEndpoints,
                 onScanNow = { viewModel.triggerDiscoveryScan() },
                 onConnectPeer = { peer -> viewModel.connectPeer(peer) },
                 onOpenChat = { peerId ->
