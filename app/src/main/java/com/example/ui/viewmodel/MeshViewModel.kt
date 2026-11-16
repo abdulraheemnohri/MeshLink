@@ -182,8 +182,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     fun triggerDiscoveryScan() {
         viewModelScope.launch {
             refreshCapabilities()
-            routingEngine.triggerAllDiscovery()
-            _snackMessages.tryEmit("Scanning BLE, Wi-Fi Direct, Wi-Fi Aware & Local LAN")
+            val results = container.discoveryCoordinator.discoverAll()
+            val active = results.keys.joinToString(", ") { it.name }
+            _snackMessages.tryEmit(if (active.isBlank()) "No enabled transport adapters are running" else "Scanning active transports: " + active)
         }
     }
 
