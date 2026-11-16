@@ -110,3 +110,14 @@ NFC status remains identity import through Android NDEF-discovered URI intents. 
 ### Wired and tethered local-network support
 
 The Local LAN adapter's interface allow-list now includes common Android interface prefixes for Ethernet and USB tethering (eth, en, usb, rndis, and br) in addition to Wi-Fi, hotspot and Wi-Fi Direct interfaces. These paths still require private IPv4 addressing, local broadcast reachability and Android/OEM interface exposure. This does not create a link where the OS or tethering topology blocks peer-to-peer traffic.
+
+
+## NFC peer bootstrap implementation
+
+The app now has a validated NDEF URI helper. It can encode a MeshLink peer URI into an NDEF URI record and extract a URI from NFC discovery intents. URI validation requires the `meshlink://peer/<id>` form, rejects credentials, ports, fragments, unexpected hosts/schemes and oversized payloads. MainActivity handles NFC intents on Android API 24–36 using the appropriate parcelable API.
+
+NFC is explicitly a bootstrap/identity handoff path, not a continuous packet transport. The NDEF helper does not rely on Android Beam, which is unavailable on modern Android. Device-to-device transfer still needs a supported tag/writer or a platform-supported handoff flow, then normal MeshLink networking takes over.
+
+### Remaining adapters (not shipped as operational)
+
+Bluetooth Classic RFCOMM and Google Nearby Connections are not yet registered in AppContainer. They must not appear as working transports until a complete adapter, permission lifecycle, framing, identity handshake, reconnect behavior and two-device tests are present. Cellular, internet and satellite are gateway paths; LoRa/Zigbee/Thread require external radio hardware. Same Wi-Fi, Ethernet and USB tethering use the existing IP/LAN adapter when Android exposes a reachable local interface.
