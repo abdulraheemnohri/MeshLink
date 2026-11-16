@@ -12,6 +12,8 @@ import com.example.core.permissions.HardwareCapabilities
 import com.example.core.protocol.MeshPacket
 import com.example.core.protocol.MeshPacketCodec
 import com.example.core.protocol.TransportType
+import org.json.JSONObject
+import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,7 +36,9 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class BluetoothClassicMeshTransport(
     private val context: Context,
-    private val localIdentityProvider: () -> LocalIdentityKeys
+    private val localIdentityProvider: () -> LocalIdentityKeys,
+    private val packetSigner: (MeshPacket) -> MeshPacket,
+    private val packetVerifier: (MeshPacket, String) -> Boolean
 ) : MeshTransport {
     override val transportType = TransportType.BLUETOOTH_CLASSIC
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -99,16 +103,17 @@ class BluetoothClassicMeshTransport(
     private suspend fun acceptLoop() {
         while (isRunning) {
             val socket = try { server?.accept() ?: break } catch (_: Exception) { break }
-            scope.launch { readSocket(socket) }
+            scope.launch { readSocket(socket, sendHello = true) }
         }
     }
 
-    private suspend fun readSocket(socket: BluetoothSocket) = withContext(Dispatchers.IO) {
+    private suspend fun readSocket(socket: BluetoothSocket, sendHello: Boolean) = withContext(Dispatchers.IO) {
         val address = socket.remoteDevice?.address ?: return@withContext
         val peerId = address.replace(":", "").lowercase()
         sockets[peerId] = socket
         eventsFlow.emit(TransportEvent.ConnectionChanged(peerId, transportType, true, address))
         try {
+            if (sendHello) sendIdentityHello(socket)
             val input = DataInputStream(socket.inputStream)
             while (isRunning && socket.isConnected) {
                 val size = try { input.readInt() } catch (_: EOFException) { break }
@@ -116,6 +121,10 @@ class BluetoothClassicMeshTransport(
                 val raw = ByteArray(size)
                 input.readFully(raw)
                 val packet = MeshPacketCodec.decode(String(raw, Charsets.UTF_8)) ?: continue
+                if (packet.packetType == com.example.core.protocol.PacketType.HELLO) {
+                    acceptIdentityHello(packet, address)
+                    continue
+                }
                 eventsFlow.emit(TransportEvent.PacketReceived(packet, transportType, address))
             }
         } catch (e: Exception) {
@@ -136,7 +145,12 @@ class BluetoothClassicMeshTransport(
                 ?: runCatching {
                     bt.getRemoteDevice(endpoint.address)
                         .createRfcommSocketToServiceRecord(SERVICE_UUID)
-                        .also { it.connect(); sockets[endpoint.deviceId] = it }
+                        .also {
+                            it.connect()
+                            sockets[endpoint.deviceId] = it
+                            sendIdentityHello(it)
+                            scope.launch { readSocket(it, sendHello = false) }
+                        }
                 }.getOrNull() ?: return@withContext false
             val bytes = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
             if (bytes.size !in 1..MAX_FRAME_BYTES) return@withContext false
@@ -149,6 +163,66 @@ class BluetoothClassicMeshTransport(
                 }
             }.isSuccess
         }
+
+    private suspend fun sendIdentityHello(socket: BluetoothSocket) {
+        val identity = localIdentityProvider()
+        val payload = JSONObject().apply {
+            put("id", identity.deviceId)
+            put("alias", identity.alias)
+            put("sig", identity.signingPublicKeyB64)
+            put("kx", identity.agreementPublicKeyB64)
+            put("fingerprint", identity.fingerprint)
+        }.toString()
+        val hello = packetSigner(
+            MeshPacket(
+                senderId = identity.deviceId,
+                destinationId = MeshPacket.BROADCAST_ID,
+                packetType = com.example.core.protocol.PacketType.HELLO,
+                encryptedPayload = payload,
+                hopLimit = 1
+            )
+        )
+        val bytes = MeshPacketCodec.encode(hello).toByteArray(Charsets.UTF_8)
+        if (bytes.size !in 1..MAX_FRAME_BYTES) return
+        val output = DataOutputStream(socket.outputStream)
+        synchronized(output) {
+            output.writeInt(bytes.size)
+            output.write(bytes)
+            output.flush()
+        }
+    }
+
+    private suspend fun acceptIdentityHello(packet: MeshPacket, address: String) {
+        val payload = runCatching { JSONObject(packet.encryptedPayload) }.getOrNull() ?: return
+        val signingKey = payload.optString("sig")
+        val agreementKey = payload.optString("kx")
+        val alias = payload.optString("alias", "Bluetooth peer")
+        val suppliedId = payload.optString("id")
+        val fingerprint = payload.optString("fingerprint")
+        if (signingKey.isBlank() || agreementKey.isBlank() || suppliedId != packet.senderId) return
+        if (!packetVerifier(packet, signingKey)) return
+        val expectedFingerprint = runCatching {
+            val input = "$signingKey|$agreementKey".toByteArray(Charsets.UTF_8)
+            MessageDigest.getInstance("SHA-256").digest(input).take(16)
+                .joinToString(":") { "%02X".format(it) }
+        }.getOrNull() ?: return
+        val expectedId = expectedFingerprint.replace(":", "").take(16).lowercase()
+        if (fingerprint != expectedFingerprint || suppliedId != expectedId) return
+        eventsFlow.emit(
+            TransportEvent.PeerFound(
+                DiscoveredEndpoint(
+                    deviceId = expectedId,
+                    alias = alias,
+                    signingPublicKey = signingKey,
+                    agreementPublicKey = agreementKey,
+                    transportType = transportType,
+                    address = address,
+                    port = 0
+                )
+            )
+        )
+        eventsFlow.emit(TransportEvent.Log(transportType, "IDENTITY_VERIFIED", "Authenticated MeshLink identity $expectedId"))
+    }
 
     override suspend fun stop() = withContext(Dispatchers.IO) {
         isRunning = false
