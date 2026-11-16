@@ -30,6 +30,11 @@ data class AvailableTransport(
     val recentFailures: Int = 0
 )
 
+
+/** Strict ONLY mode never crosses into another transport, even if fallback is enabled. */
+fun TransportPolicy.permitsFallback(): Boolean =
+    mode != TransportSelectionMode.ONLY && allowFallback
+
 sealed interface DeliveryPlan {
     data object LocalDevice : DeliveryPlan
     data class Network(val primary: TransportType, val fallback: List<TransportType>) : DeliveryPlan
