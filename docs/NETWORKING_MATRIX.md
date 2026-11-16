@@ -136,3 +136,8 @@ A native RFCOMM `MeshTransport` is now registered in `AppContainer`. It:
 Important integration limitation: bonded-device MAC-derived endpoint IDs are transport locators, not cryptographic MeshLink identities. A production peer handshake must bind the RFCOMM socket to a verified MeshLink device ID and signing/agreement keys before allowing trusted message delivery. The adapter should be treated as an initial transport path until two-device identity binding and reconnect tests pass.
 
 Google Nearby Connections remains a separate optional Play-services transport and is not implemented by this RFCOMM adapter. NFC remains bootstrap-only, not a general data transport.
+
+
+## Bluetooth Classic identity safety gate
+
+RFCOMM bonded-device discovery currently yields an Android Bluetooth address, not a MeshLink cryptographic identity. The routing event handler now refuses to register a Bluetooth Classic endpoint as a MeshLink peer while its signing and agreement public keys are empty. It records an `IDENTITY_PENDING` event instead. This prevents a bonded phone's MAC-derived identifier from becoming a trusted peer or route. Full RFCOMM messaging remains gated until an authenticated MeshLink identity handshake binds the remote public keys to the socket.
