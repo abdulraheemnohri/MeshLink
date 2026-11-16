@@ -129,7 +129,7 @@ class BluetoothClassicMeshTransport(
                     acceptIdentityHello(packet, socket)
                     continue
                 }
-                if (authResult.isCompleted && authResult.getCompleted()) {
+                if (authResult.isCompleted && runCatching { authResult.await() }.getOrDefault(false)) {
                     eventsFlow.emit(TransportEvent.PacketReceived(packet, transportType, address))
                 } else {
                     eventsFlow.emit(TransportEvent.Log(transportType, "UNAUTHENTICATED_FRAME_DROPPED", "Dropped data before peer identity verification"))
