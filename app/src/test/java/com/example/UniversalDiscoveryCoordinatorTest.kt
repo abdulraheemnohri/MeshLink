@@ -8,6 +8,7 @@ import com.example.transport.TransportEvent
 import com.example.transport.UniversalDiscoveryCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
@@ -77,7 +78,7 @@ class UniversalDiscoveryCoordinatorTest {
         assertEquals(2, coordinator.peers.value.size)
 
         coordinator.close()
-        scope.coroutineContext[SupervisorJob]?.cancel()
+        scope.coroutineContext[Job]?.cancel()
     }
 
     @Test
