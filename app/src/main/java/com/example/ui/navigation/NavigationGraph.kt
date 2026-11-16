@@ -41,6 +41,7 @@ fun NavigationGraph(
     val identity by viewModel.identity.collectAsStateWithLifecycle()
     val peers by viewModel.peers.collectAsStateWithLifecycle()
     val discoveredEndpoints by viewModel.discoveredEndpoints.collectAsStateWithLifecycle()
+    val transportHealth by viewModel.transportHealth.collectAsStateWithLifecycle()
     val connections by viewModel.connections.collectAsStateWithLifecycle()
     val allMessages by viewModel.allMessages.collectAsStateWithLifecycle()
     val groups by viewModel.groups.collectAsStateWithLifecycle()
@@ -101,6 +102,7 @@ fun NavigationGraph(
                 transfers = transfers,
                 settings = settings,
                 capabilities = capabilities,
+                transportHealth = transportHealth,
                 isRelayRunning = isRelayRunning,
                 onToggleRelay = { enable ->
                     viewModel.updateSettings { it.copy(backgroundRelayEnabled = enable) }
