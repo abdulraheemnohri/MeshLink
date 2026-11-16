@@ -142,3 +142,15 @@ NFC is for short-range identity/bootstrap handoff, not continuous mesh data tran
 - Relay startup now includes Bluetooth Classic only when enabled. When radio settings change while relay is running, the ViewModel stops disabled adapters, starts enabled adapters, and triggers discovery without restarting the foreground service.
 - The Universal Network Manager now describes Bluetooth Classic as a registered adapter; NFC and QR remain identity/bootstrap mechanisms, not packet transports.
 - Device validation remains necessary: confirm Bluetooth permission grants, bonded-device discovery, RFCOMM connection, mutual identity proof, and radio shutdown on supported Android versions.
+
+
+## Authenticated Bluetooth Classic connection actions (2026-11-17)
+
+- Added a transport-level `connect(endpoint)` contract and coordinator routing so the UI can establish a session without sending a dummy application packet.
+- Bluetooth Classic now connects to the selected bonded device's RFCOMM service, exchanges the signed MeshLink identity hello, completes the fresh-nonce challenge/response, and returns success only after the authentication deferred completes.
+- Connection-up events are emitted only after the nonce proof succeeds; the earlier pre-authentication connection-up event was removed. Failed/expired authentication closes the socket and emits diagnostic events.
+- The Nearby Mesh Nodes transport-path panel now exposes a Connect action for Bluetooth Classic endpoints. The ViewModel reports the authenticated result and records a network event on success.
+- Added a coordinator unit test proving endpoint connection is dispatched only to the adapter matching the endpoint transport.
+- Discovery scans now call `UniversalDiscoveryCoordinator.discoverAll()`, which only scans running adapters; the screen no longer invokes the routing engine's unconditional all-adapter scan.
+- Diagnostics now distinguish Bluetooth hardware support, radio enabled state, and Nearby Devices permission; Wi-Fi Direct/Aware readiness also accounts for Nearby Wi-Fi permission.
+- Physical validation remains required on two Android devices with Bluetooth enabled, MeshLink installed, bonded pairing completed in Android settings, and Nearby Devices permission granted.
