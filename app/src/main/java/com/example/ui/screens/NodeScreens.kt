@@ -805,7 +805,7 @@ fun SettingsScreen(
                         onCheckedChange = { onUpdateTransportPolicy(transportPolicy.copy(allowFallback = it)) }
                     )
                     Text("Enabled transport preferences", style = MaterialTheme.typography.titleSmall)
-                    listOf(
+                    val transportLabels = listOf(
                         TransportType.LOCAL_LAN to "Same WLAN / LAN / compatible hotspot",
                         TransportType.WIFI_DIRECT to "Wi-Fi Direct",
                         TransportType.WIFI_AWARE to "Wi-Fi Aware",
@@ -814,22 +814,52 @@ fun SettingsScreen(
                         TransportType.NFC to "NFC identity handoff (not a data transport)",
                         TransportType.QR to "QR identity handoff (not a data transport)",
                         TransportType.BLUETOOTH_CLASSIC to "Bluetooth Classic (adapter not yet registered)"
-                    ).forEach { (type, label) ->
-                        SettingSwitchRow(
-                            title = label,
-                            subtitle = if (type in setOf(TransportType.NFC, TransportType.QR, TransportType.BLUETOOTH_CLASSIC))
-                                "Capability / bootstrap only; not currently a registered packet transport"
-                            else "Preference only; requires supported hardware, permission and a discovered endpoint",
-                            checked = type !in transportPolicy.disabled,
-                            onCheckedChange = { enabled ->
-                                onUpdateTransportPolicy(
-                                    transportPolicy.copy(
-                                        disabled = if (enabled) transportPolicy.disabled - type
-                                        else transportPolicy.disabled + type
+                    ).toMap()
+                    val orderedTransportTypes = (transportPolicy.preferred + transportLabels.keys).distinct()
+                        .filter { it in transportLabels }
+                    orderedTransportTypes.forEachIndexed { index, type ->
+                        val label = transportLabels.getValue(type)
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            SettingSwitchRow(
+                                title = label,
+                                subtitle = if (type in setOf(TransportType.NFC, TransportType.QR, TransportType.BLUETOOTH_CLASSIC))
+                                    "Capability / bootstrap only; not currently a registered packet transport"
+                                else "Preference only; requires supported hardware, permission and a discovered endpoint",
+                                checked = type !in transportPolicy.disabled,
+                                onCheckedChange = { enabled ->
+                                    onUpdateTransportPolicy(
+                                        transportPolicy.copy(
+                                            disabled = if (enabled) transportPolicy.disabled - type
+                                            else transportPolicy.disabled + type
+                                        )
                                     )
-                                )
+                                }
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    enabled = index > 0,
+                                    onClick = {
+                                        val reordered = orderedTransportTypes.toMutableList()
+                                        val moved = reordered.removeAt(index)
+                                        reordered.add(index - 1, moved)
+                                        onUpdateTransportPolicy(transportPolicy.copy(preferred = reordered))
+                                    }
+                                ) { Text("Move up") }
+                                TextButton(
+                                    enabled = index < orderedTransportTypes.lastIndex,
+                                    onClick = {
+                                        val reordered = orderedTransportTypes.toMutableList()
+                                        val moved = reordered.removeAt(index)
+                                        reordered.add(index + 1, moved)
+                                        onUpdateTransportPolicy(transportPolicy.copy(preferred = reordered))
+                                    }
+                                ) { Text("Move down") }
                             }
-                        )
+                        }
                     }
                     Text(
                         "Same-device delivery is handled locally without Bluetooth or Wi-Fi. WLAN, LAN and hotspot share the Local LAN IP adapter.",
