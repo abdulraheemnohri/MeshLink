@@ -180,7 +180,7 @@ class BluetoothClassicMeshTransport(
             if (bytes.size !in 1..MAX_FRAME_BYTES) return@withContext false
             runCatching {
                 val output = DataOutputStream(socket.outputStream)
-                synchronized(output) {
+                synchronized(socket) {
                     output.writeInt(bytes.size)
                     output.write(bytes)
                     output.flush()
@@ -209,7 +209,7 @@ class BluetoothClassicMeshTransport(
         val bytes = MeshPacketCodec.encode(hello).toByteArray(Charsets.UTF_8)
         if (bytes.size !in 1..MAX_FRAME_BYTES) return
         val output = DataOutputStream(socket.outputStream)
-        synchronized(output) {
+        synchronized(socket) {
             output.writeInt(bytes.size)
             output.write(bytes)
             output.flush()
@@ -298,7 +298,7 @@ class BluetoothClassicMeshTransport(
             outstandingChallenges[socket] = signed.messageId to nonce
         }
         val output = DataOutputStream(socket.outputStream)
-        synchronized(output) {
+        synchronized(socket) {
             output.writeInt(bytes.size)
             output.write(bytes)
             output.flush()
