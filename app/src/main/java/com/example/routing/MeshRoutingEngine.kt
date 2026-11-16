@@ -1104,7 +1104,7 @@ class MeshRoutingEngine(
         if (policy.mode == com.example.transport.TransportSelectionMode.ONLY &&
             endpoint.transportType !in policy.preferred) return false
         if (policy.mode == com.example.transport.TransportSelectionMode.PREFER &&
-            !policy.allowFallback && endpoint.transportType !in policy.preferred) return false
+            endpoint.transportType !in policy.preferred) return false
         val preferred = transports.firstOrNull { it.transportType == endpoint.transportType && it.isRunning }
         if (preferred != null && preferred.sendPacket(endpoint, packet)) {
             return true
