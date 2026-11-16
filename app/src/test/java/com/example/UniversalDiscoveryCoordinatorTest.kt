@@ -100,6 +100,26 @@ class UniversalDiscoveryCoordinatorTest {
     }
 
     @Test
+    fun explicitSelectionNeverStartsDisabledAdapter() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val lan = FakeTransport(TransportType.LOCAL_LAN)
+        val ble = FakeTransport(TransportType.BLE)
+        val coordinator = UniversalDiscoveryCoordinator(listOf(lan, ble), scope)
+
+        val results = coordinator.start(setOf(TransportType.LOCAL_LAN))
+        assertTrue(results.getValue(TransportType.LOCAL_LAN).isSuccess)
+        assertFalse(results.containsKey(TransportType.BLE))
+        assertTrue(lan.isRunning)
+        assertFalse(ble.isRunning)
+
+        coordinator.stop(setOf(TransportType.LOCAL_LAN))
+        assertFalse(lan.isRunning)
+        assertFalse(ble.isRunning)
+        coordinator.close()
+        scope.coroutineContext[Job]?.cancel()
+    }
+
+    @Test
     fun adapterFailuresDoNotPreventOtherRadiosStarting() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val failed = FakeTransport(TransportType.BLE, failStart = true)
