@@ -17,7 +17,9 @@ class HandshakeReplayGuard(
         if (packet.expiresAt <= now || packet.expiresAt <= packet.createdAt) return false
         if (packet.createdAt > now + maxClockSkewMs || now - packet.createdAt > maxClockSkewMs) return false
         val cutoff = now - retentionMs
-        seen.entries.removeAll { it.value < cutoff }
+        seen.entries.forEach { entry ->
+            if (entry.value < cutoff) seen.remove(entry.key, entry.value)
+        }
         if (seen.containsKey(packet.messageId)) return false
         if (seen.size >= maxEntries) {
             seen.entries.minByOrNull { it.value }?.key?.let(seen::remove)
