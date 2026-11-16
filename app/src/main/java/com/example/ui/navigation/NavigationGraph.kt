@@ -118,6 +118,7 @@ fun NavigationGraph(
                 discoveredEndpoints = discoveredEndpoints,
                 onScanNow = { viewModel.triggerDiscoveryScan() },
                 onConnectPeer = { peer -> viewModel.connectPeer(peer) },
+                onConnectEndpoint = { endpoint -> viewModel.connectEndpoint(endpoint) },
                 onOpenChat = { peerId ->
                     navController.navigate(MeshRoute.privateChat(peerId))
                 },
