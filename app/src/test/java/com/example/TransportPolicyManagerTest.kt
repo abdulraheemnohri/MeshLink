@@ -85,6 +85,40 @@ class TransportPolicyManagerTest {
     }
 
     @Test
+    fun policyPersistsAcrossManagerInstances() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val first = TransportPolicyManager(context)
+        val expected = TransportPolicy(
+            mode = TransportSelectionMode.ONLY,
+            preferred = listOf(TransportType.WIFI_DIRECT, TransportType.LOCAL_LAN),
+            disabled = setOf(TransportType.BLE),
+            allowFallback = false
+        )
+        first.save(expected)
+        assertEquals(expected, TransportPolicyManager(context).load())
+    }
+
+    @Test
+    fun automaticModeCanDisableFallback() {
+        val policy = TransportPolicy(
+            mode = TransportSelectionMode.AUTOMATIC,
+            preferred = listOf(TransportType.LOCAL_LAN, TransportType.BLE),
+            allowFallback = false
+        )
+        val plan = manager.plan(
+            "node_a",
+            "node_b",
+            listOf(
+                AvailableTransport(TransportType.LOCAL_LAN, true, true, 100),
+                AvailableTransport(TransportType.BLE, true, true, 100)
+            ),
+            policy
+        ) as DeliveryPlan.Network
+        assertEquals(TransportType.LOCAL_LAN, plan.primary)
+        assertTrue(plan.fallback.isEmpty())
+    }
+
+    @Test
     fun disabledTransportsAreNeverSelected() {
         val policy = TransportPolicy(disabled = setOf(TransportType.LOCAL_LAN))
         val plan = manager.plan(
