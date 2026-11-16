@@ -479,7 +479,36 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateSettings(transform: (SettingsEntity) -> SettingsEntity) {
         viewModelScope.launch {
+            val previous = repository.getSettingsOnce()
             repository.updateSettings(transform)
+            val updated = repository.getSettingsOnce()
+            val radioSettingsChanged =
+                previous.localLanEnabled != updated.localLanEnabled ||
+                previous.bleEnabled != updated.bleEnabled ||
+                previous.bluetoothClassicEnabled != updated.bluetoothClassicEnabled ||
+                previous.wifiDirectEnabled != updated.wifiDirectEnabled ||
+                previous.wifiAwareEnabled != updated.wifiAwareEnabled
+
+            // Apply radio toggles immediately when the foreground relay is already active.
+            if (radioSettingsChanged && container.isRelayRunning.value) {
+                val enabled = buildSet {
+                    if (updated.localLanEnabled) add(com.example.core.protocol.TransportType.LOCAL_LAN)
+                    if (updated.bleEnabled) add(com.example.core.protocol.TransportType.BLE)
+                    if (updated.bluetoothClassicEnabled) add(com.example.core.protocol.TransportType.BLUETOOTH_CLASSIC)
+                    if (updated.wifiDirectEnabled) add(com.example.core.protocol.TransportType.WIFI_DIRECT)
+                    if (updated.wifiAwareEnabled) add(com.example.core.protocol.TransportType.WIFI_AWARE)
+                }
+                val registered = setOf(
+                    com.example.core.protocol.TransportType.LOCAL_LAN,
+                    com.example.core.protocol.TransportType.BLE,
+                    com.example.core.protocol.TransportType.BLUETOOTH_CLASSIC,
+                    com.example.core.protocol.TransportType.WIFI_DIRECT,
+                    com.example.core.protocol.TransportType.WIFI_AWARE
+                )
+                container.discoveryCoordinator.stop(registered - enabled)
+                container.discoveryCoordinator.start(enabled)
+                container.discoveryCoordinator.discoverAll()
+            }
         }
     }
 
