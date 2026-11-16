@@ -745,6 +745,12 @@ fun SettingsScreen(
                         onCheckedChange = { c -> onUpdateSettings { it.copy(bleEnabled = c) } }
                     )
                     SettingSwitchRow(
+                        title = "Bluetooth Classic (RFCOMM)",
+                        subtitle = "Connects to already-bonded peers; Android Nearby Devices permission required",
+                        checked = settings.bluetoothClassicEnabled,
+                        onCheckedChange = { c -> onUpdateSettings { it.copy(bluetoothClassicEnabled = c) } }
+                    )
+                    SettingSwitchRow(
                         title = "Wi-Fi Direct (P2P)",
                         subtitle = "High-throughput peer-to-peer Wi-Fi links",
                         checked = settings.wifiDirectEnabled,
@@ -813,7 +819,7 @@ fun SettingsScreen(
                         TransportType.HOTSPOT to "Hotspot (LAN adapter path)",
                         TransportType.NFC to "NFC identity handoff (not a data transport)",
                         TransportType.QR to "QR identity handoff (not a data transport)",
-                        TransportType.BLUETOOTH_CLASSIC to "Bluetooth Classic (adapter not yet registered)"
+                        TransportType.BLUETOOTH_CLASSIC to "Bluetooth Classic RFCOMM (bonded peers)"
                     ).toMap()
                     val orderedTransportTypes = (transportPolicy.preferred + transportLabels.keys).distinct()
                         .filter { it in transportLabels }
@@ -822,8 +828,8 @@ fun SettingsScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             SettingSwitchRow(
                                 title = label,
-                                subtitle = if (type in setOf(TransportType.NFC, TransportType.QR, TransportType.BLUETOOTH_CLASSIC))
-                                    "Capability / bootstrap only; not currently a registered packet transport"
+                                subtitle = if (type in setOf(TransportType.NFC, TransportType.QR))
+                                    "Identity handoff only; not a data transport"
                                 else "Preference only; requires supported hardware, permission and a discovered endpoint",
                                 checked = type !in transportPolicy.disabled,
                                 onCheckedChange = { enabled ->
