@@ -5,7 +5,7 @@ import com.example.core.protocol.PacketType
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Bounded freshness and replay guard for signed HELLO frames.
+ * Bounded freshness and replay guard for signed handshake frames.
  *
  * This is an in-memory, per-process defense. It does not replace signature
  * verification, persistent trust decisions, or a nonce-based session handshake.
@@ -25,7 +25,7 @@ class HandshakeReplayGuard(
 
     @Synchronized
     fun accept(packet: MeshPacket, now: Long = System.currentTimeMillis()): Boolean {
-        if (packet.packetType != PacketType.HELLO) return false
+        if (packet.packetType != PacketType.HELLO && packet.packetType != PacketType.PEER_HANDSHAKE) return false
         if (packet.protocolVersion != MeshPacket.PROTOCOL_VERSION) return false
         if (packet.messageId.isBlank() || packet.createdAt <= 0L) return false
         if (packet.expiresAt <= now || packet.expiresAt <= packet.createdAt) return false
