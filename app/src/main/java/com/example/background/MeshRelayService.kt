@@ -59,6 +59,7 @@ class MeshRelayService : Service() {
                     val enabledTransports = buildSet {
                         if (settings.localLanEnabled) add(TransportType.LOCAL_LAN)
                         if (settings.bleEnabled) add(TransportType.BLE)
+                        if (settings.bluetoothClassicEnabled) add(TransportType.BLUETOOTH_CLASSIC)
                         if (settings.wifiDirectEnabled) add(TransportType.WIFI_DIRECT)
                         if (settings.wifiAwareEnabled) add(TransportType.WIFI_AWARE)
                     }
