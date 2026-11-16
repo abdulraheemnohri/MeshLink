@@ -27,6 +27,8 @@ import com.example.location.LocalGpsFix
 import com.example.location.RelativeVector
 import com.example.security.BiometricManager
 import com.example.voice.VoiceRecordingItem
+import com.example.transport.TransportPolicy
+import com.example.transport.TransportSelectionMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +47,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     private val fileManager = container.fileTransferManager
     private val voiceManager = container.voiceAudioManager
     private val locationManager = container.locationSharingManager
+    private val transportPolicyManager = container.transportPolicyManager
+    val transportPolicy: StateFlow<TransportPolicy> = MutableStateFlow(transportPolicyManager.load())
     val biometricManager: BiometricManager = container.biometricManager
 
     val identity: StateFlow<DeviceIdentityEntity?> = repository.identityFlow
@@ -214,6 +218,11 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             repository.setPeerBlocked(peer.deviceId, !peer.blocked)
             _snackMessages.tryEmit(if (!peer.blocked) "Blocked ${peer.alias}" else "Unblocked ${peer.alias}")
         }
+    }
+
+    fun updateTransportPolicy(policy: TransportPolicy) {
+        transportPolicyManager.save(policy)
+        (transportPolicy as MutableStateFlow).value = policy
     }
 
     fun buildLocalIdentityUri(): String {
