@@ -161,6 +161,30 @@ class UniversalDiscoveryCoordinatorTest {
     }
 
     @Test
+    fun transportHealthTracksStartDiscoveryAndFailures() = runBlocking<Unit> {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val lan = FakeTransport(TransportType.LOCAL_LAN)
+        val brokenBle = FakeTransport(TransportType.BLE, failStart = true)
+        val coordinator = UniversalDiscoveryCoordinator(listOf(lan, brokenBle), scope)
+
+        coordinator.start(setOf(TransportType.LOCAL_LAN, TransportType.BLE))
+        var health = coordinator.transportHealth.value.associateBy { it.transportType }
+        assertTrue(health.getValue(TransportType.LOCAL_LAN).running)
+        assertFalse(health.getValue(TransportType.BLE).running)
+        assertEquals("radio unavailable", health.getValue(TransportType.BLE).lastError)
+
+        coordinator.discoverAll()
+        health = coordinator.transportHealth.value.associateBy { it.transportType }
+        assertTrue(health.getValue(TransportType.LOCAL_LAN).lastDiscoveryAt != null)
+
+        coordinator.stopAll()
+        health = coordinator.transportHealth.value.associateBy { it.transportType }
+        assertFalse(health.getValue(TransportType.LOCAL_LAN).running)
+        coordinator.close()
+        scope.coroutineContext[Job]?.cancel()
+    }
+
+    @Test
     fun adapterFailuresDoNotPreventOtherRadiosStarting() = runBlocking<Unit> {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val failed = FakeTransport(TransportType.BLE, failStart = true)
