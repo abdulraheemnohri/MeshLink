@@ -154,3 +154,12 @@ NFC is for short-range identity/bootstrap handoff, not continuous mesh data tran
 - Discovery scans now call `UniversalDiscoveryCoordinator.discoverAll()`, which only scans running adapters; the screen no longer invokes the routing engine's unconditional all-adapter scan.
 - Diagnostics now distinguish Bluetooth hardware support, radio enabled state, and Nearby Devices permission; Wi-Fi Direct/Aware readiness also accounts for Nearby Wi-Fi permission.
 - Physical validation remains required on two Android devices with Bluetooth enabled, MeshLink installed, bonded pairing completed in Android settings, and Nearby Devices permission granted.
+
+
+## Discovery identity normalization and final connection safeguards (2026-11-17)
+
+- When a transport first reports a hardware address and later reports the authenticated MeshLink device ID for the same transport/address, the coordinator replaces the provisional entry rather than displaying duplicate peers.
+- Bluetooth Classic now emits its connected event only after the signed fresh-nonce response has been verified; the earlier pre-authentication connected event is not emitted.
+- Added coordinator tests for transport-specific connect dispatch and provisional-to-authenticated identity replacement.
+- Scan Now uses the coordinator's running-adapter set, preventing disabled transports from receiving discovery triggers.
+- CI for this final batch must be checked against the latest main commit before release. No physical-device acceptance run has been performed from this environment.
