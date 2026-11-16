@@ -51,6 +51,7 @@ fun NavigationGraph(
     val networkEvents by viewModel.networkEvents.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val userSettings by viewModel.userSettings.collectAsStateWithLifecycle()
+    val transportPolicy by viewModel.transportPolicy.collectAsStateWithLifecycle()
     val isRelayRunning by viewModel.isRelayRunning.collectAsStateWithLifecycle()
     val capabilities by viewModel.capabilities.collectAsStateWithLifecycle()
     val loopbackResult by viewModel.loopbackResult.collectAsStateWithLifecycle()
@@ -327,6 +328,8 @@ fun NavigationGraph(
                 },
                 onToggleBiometric = { enabled -> viewModel.setBiometricLockEnabled(enabled) },
                 onLockNow = { viewModel.lockApp() },
+                transportPolicy = transportPolicy,
+                onUpdateTransportPolicy = { viewModel.updateTransportPolicy(it) },
                 onUpdateSettings = { fn -> viewModel.updateSettings(fn) }
             )
         }
