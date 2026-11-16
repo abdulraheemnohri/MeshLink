@@ -1,0 +1,57 @@
+# MeshLink networking and transport selection
+
+This document separates transports that are implemented in the current Android source from platform capabilities that require a dedicated adapter. A transport name in the protocol enum is not proof that an adapter is implemented.
+
+## Network modes
+
+| Mode | What it means | Current status / constraints |
+|---|---|---|
+| Same Wi-Fi network | Phones connected to the same router / access point | Supported through Local LAN UDP discovery + TCP packet delivery, subject to Android/OEM network isolation |
+| WLAN / Wi-Fi | General wireless LAN connectivity | Uses the active WLAN interface through Local LAN; Wi-Fi itself is a link, not a separate application protocol |
+| Local Area Network (LAN) | Private IPv4 network, including compatible home/office networks | Local LAN adapter filters private IPv4 and supported mesh interfaces |
+| Mobile hotspot | One phone exposes a hotspot and another joins | Intended to use Local LAN; hotspot subnet/interface behavior varies by OEM and requires device testing |
+| Wi-Fi Direct (P2P) | Direct group-owner/client Wi-Fi connection without a router | Dedicated adapter exists; client IP discovery is best-effort and OEM-dependent |
+| Wi-Fi Aware (NAN) | Nearby discovery/data path without joining a conventional WLAN | Dedicated adapter exists on Android 8+ devices that expose Wi-Fi Aware; hardware/carrier/OEM support varies |
+| Bluetooth LE | Low-power discovery and GATT data | Dedicated adapter exists; throughput is limited and transfers are fragmented |
+| NFC | Tap to exchange a small bootstrap payload / peer identity URI | Manifest permission and intent filter exist; this is not a general message/file transport and an end-to-end NDEF exchange adapter is not yet verified |
+| QR code | Optical, one-way-at-a-time exchange of identity/bootstrap data | Identity URI encoding/import exists; QR is not a continuous network transport |
+| Bluetooth Classic RFCOMM | Paired-device serial data channel | Enum capability only; no verified RFCOMM transport adapter in current transport registration |
+| Android Nearby Connections | Google Play services nearby peer-to-peer API | Not currently integrated. It can use Bluetooth, BLE and Wi-Fi under the hood; requires Play services and is not an independent radio |
+| USB / Ethernet / USB tethering | Local IP network over a cable or adapter | Can work through Local LAN if Android exposes a supported private interface; no dedicated USB transport |
+| Internet / WAN | Public IP connectivity across networks | Not a default offline mesh path. Requires explicit relay infrastructure, addressing, NAT traversal and security design |
+| Cellular data / 4G / 5G | Carrier IP connectivity | Not direct phone-to-phone radio messaging. Can carry an explicitly configured internet relay; carrier restrictions apply |
+| Satellite | Satellite modem / carrier service | No direct satellite radio adapter; only a future IP gateway integration with compatible hardware/service |
+| Thread / Zigbee / LoRa / Wi-Fi HaLow | Specialized low-power radio networks | Not built into ordinary Android phones; requires external radio hardware and a gateway/adapter |
+
+## Protocol selection
+
+The packet protocol (MLP/1) is transport-independent. The transport is the actual link carrying the packet. Do not confuse packet routing strategies with radio/link selection.
+
+### Desired user controls
+
+- **Automatic (recommended):** choose a reachable, supported transport based on peer reachability, capability, packet size, link quality, and recent send failures; retry through other supported links when appropriate.
+- **Prefer one transport:** BLE, Wi-Fi Direct, Wi-Fi Aware, same-network LAN, or hotspot/LAN. The preference must fall back only when the user permits fallback.
+- **Only this transport:** strict mode. Do not silently send over another radio; queue the packet if the selected link is unavailable.
+- **Disable transport:** never scan, advertise, or send using that adapter.
+- **Per-peer connection view:** show all currently discovered paths to the same cryptographic peer identity. Do not treat a BLE MAC, IP address, Wi-Fi Direct address, or Nearby endpoint ID as the peer's identity.
+
+Current implementation note: MeshRoutingEngine already prefers the endpoint's discovered transport and attempts other registered transports as fallback. A complete persisted user-facing transport policy (Automatic / Prefer / Only / Disabled) and multi-path per-peer UI still need implementation; do not present them as already shipped.
+
+## Safety and compatibility rules
+
+1. Use the cryptographic MeshLink device identity and signed handshake for trust. Network addresses are temporary locators only.
+2. Do not accept packets solely because a device is on the same WLAN/LAN. Private network membership is not authentication.
+3. Apply packet signature verification, replay protection, expiry, size limits and rate limits on every transport.
+4. Never expose the local TCP listener to arbitrary public interfaces. LAN discovery and sockets must be scoped to intended private interfaces.
+5. Respect Android runtime permissions, foreground-service limits, radio toggles and OEM background restrictions.
+6. If a transport is unsupported, disabled, permission-denied, or unavailable, show its reason and continue only according to the selected fallback policy.
+7. NFC and QR are bootstrap / contact-exchange methods, not substitutes for continuous network links.
+8. Android Nearby Connections must be treated as an optional Google Play services integration, not as a guaranteed offline capability on every Android distribution.
+9. Internet, cellular and satellite gateways must be explicit opt-in bridge paths; never imply end-to-end offline delivery when a gateway is involved.
+10. No protocol is guaranteed to work on every Android phone. Report detected capabilities separately from tested interoperability.
+
+## Validation matrix
+
+Before marking a path release-ready, test two physical phones in both directions, then a three-phone relay scenario where applicable. Record Android versions, OEM, chipset, permission state, network topology, packet sizes, transfer hashes, reconnect behavior and battery impact in [DEVICE_TEST_CHECKLIST.md](DEVICE_TEST_CHECKLIST.md).
+
+MeshLink is best-effort communication software. It must not be represented as guaranteed emergency, medical, or public-safety infrastructure.
