@@ -122,7 +122,7 @@ class BluetoothClassicMeshTransport(
                 input.readFully(raw)
                 val packet = MeshPacketCodec.decode(String(raw, Charsets.UTF_8)) ?: continue
                 if (packet.packetType == com.example.core.protocol.PacketType.HELLO) {
-                    acceptIdentityHello(packet, address)
+                    acceptIdentityHello(packet, socket)
                     continue
                 }
                 eventsFlow.emit(TransportEvent.PacketReceived(packet, transportType, address))
@@ -130,7 +130,7 @@ class BluetoothClassicMeshTransport(
         } catch (e: Exception) {
             eventsFlow.emit(TransportEvent.Log(transportType, "CLASSIC_RX_ERROR", e.message ?: "RFCOMM receive failed"))
         } finally {
-            sockets.remove(peerId, socket)
+            sockets.entries.removeAll { it.value === socket }
             runCatching { socket.close() }
             eventsFlow.emit(TransportEvent.ConnectionChanged(peerId, transportType, false, address))
         }
@@ -192,7 +192,8 @@ class BluetoothClassicMeshTransport(
         }
     }
 
-    private suspend fun acceptIdentityHello(packet: MeshPacket, address: String) {
+    private suspend fun acceptIdentityHello(packet: MeshPacket, socket: BluetoothSocket) {
+        val address = socket.remoteDevice?.address ?: return
         val payload = runCatching { JSONObject(packet.encryptedPayload) }.getOrNull() ?: return
         val signingKey = payload.optString("sig")
         val agreementKey = payload.optString("kx")
@@ -208,6 +209,7 @@ class BluetoothClassicMeshTransport(
         }.getOrNull() ?: return
         val expectedId = expectedFingerprint.replace(":", "").take(16).lowercase()
         if (fingerprint != expectedFingerprint || suppliedId != expectedId) return
+        sockets[expectedId] = socket
         eventsFlow.emit(
             TransportEvent.PeerFound(
                 DiscoveredEndpoint(
