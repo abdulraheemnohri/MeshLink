@@ -88,3 +88,10 @@ These entries describe source changes only. They do not mean the corresponding r
 ## Release status
 
 No release should be described as production-ready until the build, unit tests, physical-device transport matrix and independent security review have passed. CI can verify compilation and automated tests; it cannot certify radio interoperability or cryptographic design.
+
+
+## Universal transport policy integration
+
+The persisted Automatic / Prefer / Only transport policy is now exposed in Settings and ViewModel. The packet dispatcher enforces disabled transport preferences and strict Only mode. It avoids cross-adapter fallback using an incompatible endpoint locator. Same-device destinations are handled as local loopback delivery without a radio. Unit tests cover persistence, strict mode, preference ranking, disabled transports, payload limits and fallback control.
+
+NFC identity URI import is wired through the existing NDEF_DISCOVERED intent handler. This is bootstrap only; Android Beam is deprecated/removed on modern Android and no arbitrary NFC phone-to-phone data transport is claimed. Bluetooth Classic RFCOMM and Google Nearby Connections remain unregistered adapters and must not be presented as operational.
