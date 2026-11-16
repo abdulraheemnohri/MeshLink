@@ -120,7 +120,6 @@ class BluetoothClassicMeshTransport(
         val peerId = address.replace(":", "").lowercase()
         sockets[peerId] = socket
         val authResult = authentication.getOrPut(socket) { CompletableDeferred() }
-        eventsFlow.emit(TransportEvent.ConnectionChanged(peerId, transportType, true, address))
         try {
             if (sendHello) sendIdentityHello(socket)
             val input = DataInputStream(socket.inputStream)
@@ -158,24 +157,52 @@ class BluetoothClassicMeshTransport(
     }
 
     @SuppressLint("MissingPermission")
+    @SuppressLint("MissingPermission")
+    override suspend fun connect(endpoint: DiscoveredEndpoint): Boolean = withContext(Dispatchers.IO) {
+        if (!isRunning || !HardwareCapabilities.hasBluetoothPermissions(context)) return@withContext false
+        val existing = sockets[endpoint.deviceId]?.takeIf { it.isConnected }
+            ?: sockets.values.firstOrNull {
+                runCatching { it.isConnected && it.remoteDevice.address == endpoint.address }.getOrDefault(false)
+            }
+        if (existing != null) {
+            val pending = authentication.getOrPut(existing) { CompletableDeferred() }
+            return@withContext withTimeoutOrNull(AUTH_TIMEOUT_MS) { pending.await() } == true
+        }
+        val bt = adapter ?: return@withContext false
+        val socket = runCatching {
+            bt.getRemoteDevice(endpoint.address).createRfcommSocketToServiceRecord(SERVICE_UUID).also { it.connect() }
+        }.getOrElse {
+            eventsFlow.emit(TransportEvent.Log(transportType, "CLASSIC_CONNECT_FAILED", it.message ?: "RFCOMM connection failed"))
+            return@withContext false
+        }
+        val auth = CompletableDeferred<Boolean>()
+        authentication[socket] = auth
+        sockets[endpoint.deviceId] = socket
+        try {
+            sendIdentityHello(socket)
+            scope.launch { readSocket(socket, sendHello = false) }
+            val authenticated = withTimeoutOrNull(AUTH_TIMEOUT_MS) { auth.await() } == true
+            if (!authenticated) {
+                eventsFlow.emit(TransportEvent.Log(transportType, "CLASSIC_AUTH_TIMEOUT", "Bluetooth peer did not complete mutual identity proof"))
+                runCatching { socket.close() }
+            }
+            authenticated
+        } catch (error: Exception) {
+            authentication.remove(socket)?.complete(false)
+            sockets.entries.removeAll { it.value === socket }
+            runCatching { socket.close() }
+            eventsFlow.emit(TransportEvent.Log(transportType, "CLASSIC_CONNECT_ERROR", error.message ?: "RFCOMM connection failed"))
+            false
+        }
+    }
+
     override suspend fun sendPacket(endpoint: DiscoveredEndpoint, packet: MeshPacket): Boolean =
         withContext(Dispatchers.IO) {
-            if (!isRunning || !HardwareCapabilities.hasBluetoothPermissions(context)) return@withContext false
-            val bt = adapter ?: return@withContext false
+            if (!connect(endpoint)) return@withContext false
             val socket = sockets[endpoint.deviceId]?.takeIf { it.isConnected }
-                ?: runCatching {
-                    bt.getRemoteDevice(endpoint.address)
-                        .createRfcommSocketToServiceRecord(SERVICE_UUID)
-                        .also {
-                            it.connect()
-                            sockets[endpoint.deviceId] = it
-                            sendIdentityHello(it)
-                            scope.launch { readSocket(it, sendHello = false) }
-                        }
-                }.getOrNull() ?: return@withContext false
-            val authResult = authentication.getOrPut(socket) { CompletableDeferred() }
-            val authenticated = withTimeoutOrNull(AUTH_TIMEOUT_MS) { authResult.await() } == true
-            if (!authenticated) return@withContext false
+                ?: sockets.values.firstOrNull {
+                    runCatching { it.isConnected && it.remoteDevice.address == endpoint.address }.getOrDefault(false)
+                } ?: return@withContext false
             val bytes = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
             if (bytes.size !in 1..MAX_FRAME_BYTES) return@withContext false
             runCatching {
