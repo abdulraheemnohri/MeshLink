@@ -15,7 +15,6 @@ import com.example.core.protocol.TransportType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -38,7 +37,7 @@ class BluetoothClassicMeshTransport(
     private val localIdentityProvider: () -> LocalIdentityKeys
 ) : MeshTransport {
     override val transportType = TransportType.BLUETOOTH_CLASSIC
-    @Volatile private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val eventsFlow = MutableSharedFlow<TransportEvent>(extraBufferCapacity = 64)
     override val events: Flow<TransportEvent> = eventsFlow.asSharedFlow()
     private val adapter: BluetoothAdapter? =
@@ -51,9 +50,6 @@ class BluetoothClassicMeshTransport(
     @SuppressLint("MissingPermission")
     override suspend fun start() = withContext(Dispatchers.IO) {
         if (isRunning) return@withContext
-        if (!scope.coroutineContext[kotlinx.coroutines.Job]!!.isActive) {
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        }
         val bt = adapter
         if (bt == null || !bt.isEnabled || !HardwareCapabilities.hasBluetoothPermissions(context)) {
             eventsFlow.tryEmit(TransportEvent.Log(transportType, "CLASSIC_STANDBY",
@@ -160,7 +156,7 @@ class BluetoothClassicMeshTransport(
         server = null
         sockets.values.forEach { runCatching { it.close() } }
         sockets.clear()
-        scope.coroutineContext.cancel()
+
     }
 
     companion object {
