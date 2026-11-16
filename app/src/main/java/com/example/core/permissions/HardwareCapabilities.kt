@@ -33,6 +33,25 @@ data class HardwareCapabilityReport(
 )
 
 object HardwareCapabilities {
+    /** Runtime permissions needed for Bluetooth and nearby Wi-Fi transports only. */
+    fun transportRuntimePermissions(): List<String> {
+        val list = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            list += Manifest.permission.BLUETOOTH_SCAN
+            list += Manifest.permission.BLUETOOTH_ADVERTISE
+            list += Manifest.permission.BLUETOOTH_CONNECT
+        } else {
+            list += Manifest.permission.ACCESS_COARSE_LOCATION
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            list += Manifest.permission.NEARBY_WIFI_DEVICES
+            list += Manifest.permission.POST_NOTIFICATIONS
+        } else {
+            list += Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        return list.distinct()
+    }
+
     fun requiredRuntimePermissions(): List<String> {
         val list = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
