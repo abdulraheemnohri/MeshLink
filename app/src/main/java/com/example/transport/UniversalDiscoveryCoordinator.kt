@@ -51,9 +51,12 @@ class UniversalDiscoveryCoordinator(
         }
     }
 
-    suspend fun startAll(): Map<TransportType, Result<Unit>> {
+    suspend fun startAll(): Map<TransportType, Result<Unit>> = start(adapters.map { it.transportType }.toSet())
+
+    /** Starts only explicitly enabled adapters; disabled radios are never started implicitly. */
+    suspend fun start(types: Set<TransportType>): Map<TransportType, Result<Unit>> {
         val results = linkedMapOf<TransportType, Result<Unit>>()
-        adapters.forEach { adapter ->
+        adapters.filter { it.transportType in types }.forEach { adapter ->
             results[adapter.transportType] = runCatching { adapter.start() }
         }
         return results
@@ -68,9 +71,11 @@ class UniversalDiscoveryCoordinator(
         return results
     }
 
-    suspend fun stopAll(): Map<TransportType, Result<Unit>> {
+    suspend fun stopAll(): Map<TransportType, Result<Unit>> = stop(adapters.map { it.transportType }.toSet())
+
+    suspend fun stop(types: Set<TransportType>): Map<TransportType, Result<Unit>> {
         val results = linkedMapOf<TransportType, Result<Unit>>()
-        adapters.forEach { adapter ->
+        adapters.filter { it.transportType in types }.forEach { adapter ->
             results[adapter.transportType] = runCatching { adapter.stop() }
         }
         return results
