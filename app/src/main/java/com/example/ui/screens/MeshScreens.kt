@@ -62,6 +62,7 @@ import com.example.data.entities.DeviceIdentityEntity
 import com.example.data.entities.PeerEntity
 import com.example.data.entities.RouteEntity
 import com.example.data.entities.SettingsEntity
+import com.example.transport.DiscoveredEndpoint
 import com.example.ui.components.GlassPanel
 import com.example.ui.components.MeshPillBadge
 import com.example.ui.components.PulseStatusDot
@@ -79,6 +80,7 @@ import kotlin.math.sin
 @Composable
 fun DiscoverScreen(
     peers: List<PeerEntity>,
+    discoveredEndpoints: List<DiscoveredEndpoint> = emptyList(),
     onScanNow: () -> Unit,
     onConnectPeer: (PeerEntity) -> Unit,
     onOpenChat: (String) -> Unit,
@@ -128,6 +130,40 @@ fun DiscoverScreen(
                             Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Pair URI / QR")
+                        }
+                    }
+                }
+            }
+
+            if (discoveredEndpoints.isNotEmpty()) {
+                item {
+                    val pathsByPeer = discoveredEndpoints.groupBy { it.deviceId }
+                    GlassPanel(accentColor = ElectricTeal) {
+                        SectionTitle(
+                            title = "Live Transport Paths",
+                            subtitle = "${pathsByPeer.size} discovered nodes • ${discoveredEndpoints.size} active endpoints"
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        pathsByPeer.forEach { (deviceId, paths) ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = paths.firstOrNull()?.alias?.ifBlank { deviceId } ?: deviceId,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                paths.sortedBy { it.transportType.name }.forEach { path ->
+                                    val endpointLabel = if (path.port > 0) "${path.address}:${path.port}" else path.address
+                                    val ageSeconds = ((System.currentTimeMillis() - path.lastSeenAt).coerceAtLeast(0L) / 1_000L)
+                                    Text(
+                                        text = "${path.transportType.name}  •  ${endpointLabel}  •  seen ${ageSeconds}s ago",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
                 }
