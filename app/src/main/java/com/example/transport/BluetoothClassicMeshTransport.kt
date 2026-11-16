@@ -50,6 +50,7 @@ class BluetoothClassicMeshTransport(
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
     private val sockets = ConcurrentHashMap<String, BluetoothSocket>()
     private val authentication = ConcurrentHashMap<BluetoothSocket, CompletableDeferred<Boolean>>()
+    private val handshakeReplayGuard = HandshakeReplayGuard()
     @Volatile private var server: BluetoothServerSocket? = null
     @Volatile override var isRunning = false
         private set
@@ -214,6 +215,13 @@ class BluetoothClassicMeshTransport(
         val fingerprint = payload.optString("fingerprint")
         if (signingKey.isBlank() || agreementKey.isBlank() || suppliedId != packet.senderId) return
         if (!packetVerifier(packet, signingKey)) return
+        if (packet.integrityHash.isBlank() ||
+            packet.integrityHash != MeshPacketCodec.computeIntegrityHash(packet)
+        ) return
+        if (!handshakeReplayGuard.accept(packet)) {
+            eventsFlow.emit(TransportEvent.Log(transportType, "REPLAYED_OR_STALE_HELLO", "Rejected stale or replayed Bluetooth identity handshake"))
+            return
+        }
         val expectedFingerprint = runCatching {
             val input = "$signingKey|$agreementKey".toByteArray(Charsets.UTF_8)
             MessageDigest.getInstance("SHA-256").digest(input).take(16)
