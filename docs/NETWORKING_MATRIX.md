@@ -68,7 +68,7 @@ A persistent SharedPreferences-backed `TransportPolicyManager` is now part of th
 - Same-device destination: returns a local-device delivery plan without requiring a radio.
 - Oversized payloads, stopped adapters, undiscovered endpoints and repeated failures are excluded.
 
-The manager is a policy component. The routing engine still needs to consume its plan at the packet-dispatch call site and the settings UI must expose/save the policy before these controls are considered end-to-end shipped. The manager has unit coverage for policy decisions.
+The policy is persisted and exposed in Settings. The packet dispatcher applies the selected mode, disabled transports, payload limits and fallback control. The routing engine now retains multiple transport-specific endpoints per peer, allowing fallback only through a separately discovered endpoint for that same peer.
 
 ### Network types versus actual adapters
 
@@ -95,3 +95,13 @@ The following are separate concepts, not all independent radio protocols:
 - Policy tests cover local-device selection, preference ranking, strict mode, payload-size rejection, disabled transports, persistence and fallback disabling.
 
 NFC status remains identity import through Android NDEF-discovered URI intents. Android Beam phone-to-phone NDEF push is not available on modern Android releases; therefore MeshLink does not claim that two phones can exchange arbitrary data simply by tapping. NFC remains a bootstrap path and QR remains the universal fallback.
+
+
+### Multi-path routing implementation update
+
+- Each peer now retains a separate endpoint locator for every discovered transport instead of allowing the latest discovery event to overwrite the previous path.
+- Direct delivery ranks live paths by the saved preference order and signal strength, and checks each candidate against its own adapter and maximum packet size.
+- Automatic mode can retry the next discovered path after a send failure. Prefer mode tries configured transports first and may use another discovered path when fallback is enabled. Only mode restricts delivery to configured transports.
+- A transport disconnect removes only that transport's endpoint. Other live paths to the same peer remain usable.
+- The dispatcher never reuses a BLE address as an IP address or passes a Wi-Fi Direct locator to the LAN adapter.
+- This is multi-path failover, not simultaneous multipath bonding. It does not create missing endpoints or bypass Android permissions, radio availability or hardware limitations.
