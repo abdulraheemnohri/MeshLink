@@ -121,3 +121,18 @@ NFC is explicitly a bootstrap/identity handoff path, not a continuous packet tra
 ### Remaining adapters (not shipped as operational)
 
 Bluetooth Classic RFCOMM and Google Nearby Connections are not yet registered in AppContainer. They must not appear as working transports until a complete adapter, permission lifecycle, framing, identity handshake, reconnect behavior and two-device tests are present. Cellular, internet and satellite are gateway paths; LoRa/Zigbee/Thread require external radio hardware. Same Wi-Fi, Ethernet and USB tethering use the existing IP/LAN adapter when Android exposes a reachable local interface.
+
+
+## Bluetooth Classic RFCOMM adapter
+
+A native RFCOMM `MeshTransport` is now registered in `AppContainer`. It:
+- Opens a named RFCOMM server using a stable MeshLink service UUID.
+- Lists Android-bonded devices as candidate endpoints (it does not silently pair or force discoverability).
+- Uses bounded 4-byte length-prefixed MeshPacketCodec frames.
+- Rejects frames outside 1..256 KiB and decodes packets before emitting receive events.
+- Tracks connected sockets and closes them on transport stop.
+- Requires Bluetooth to be enabled and the Android Nearby Devices permissions to be granted.
+
+Important integration limitation: bonded-device MAC-derived endpoint IDs are transport locators, not cryptographic MeshLink identities. A production peer handshake must bind the RFCOMM socket to a verified MeshLink device ID and signing/agreement keys before allowing trusted message delivery. The adapter should be treated as an initial transport path until two-device identity binding and reconnect tests pass.
+
+Google Nearby Connections remains a separate optional Play-services transport and is not implemented by this RFCOMM adapter. NFC remains bootstrap-only, not a general data transport.
