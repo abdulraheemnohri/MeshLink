@@ -18,6 +18,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -47,6 +49,7 @@ class BluetoothClassicMeshTransport(
     private val adapter: BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
     private val sockets = ConcurrentHashMap<String, BluetoothSocket>()
+    private val authentication = ConcurrentHashMap<BluetoothSocket, CompletableDeferred<Boolean>>()
     @Volatile private var server: BluetoothServerSocket? = null
     @Volatile override var isRunning = false
         private set
@@ -111,6 +114,7 @@ class BluetoothClassicMeshTransport(
         val address = socket.remoteDevice?.address ?: return@withContext
         val peerId = address.replace(":", "").lowercase()
         sockets[peerId] = socket
+        val authResult = authentication.getOrPut(socket) { CompletableDeferred() }
         eventsFlow.emit(TransportEvent.ConnectionChanged(peerId, transportType, true, address))
         try {
             if (sendHello) sendIdentityHello(socket)
@@ -125,11 +129,16 @@ class BluetoothClassicMeshTransport(
                     acceptIdentityHello(packet, socket)
                     continue
                 }
-                eventsFlow.emit(TransportEvent.PacketReceived(packet, transportType, address))
+                if (authResult.isCompleted && authResult.getCompleted()) {
+                    eventsFlow.emit(TransportEvent.PacketReceived(packet, transportType, address))
+                } else {
+                    eventsFlow.emit(TransportEvent.Log(transportType, "UNAUTHENTICATED_FRAME_DROPPED", "Dropped data before peer identity verification"))
+                }
             }
         } catch (e: Exception) {
             eventsFlow.emit(TransportEvent.Log(transportType, "CLASSIC_RX_ERROR", e.message ?: "RFCOMM receive failed"))
         } finally {
+            authentication.remove(socket)?.complete(false)
             sockets.entries.removeAll { it.value === socket }
             runCatching { socket.close() }
             eventsFlow.emit(TransportEvent.ConnectionChanged(peerId, transportType, false, address))
@@ -152,6 +161,9 @@ class BluetoothClassicMeshTransport(
                             scope.launch { readSocket(it, sendHello = false) }
                         }
                 }.getOrNull() ?: return@withContext false
+            val authResult = authentication.getOrPut(socket) { CompletableDeferred() }
+            val authenticated = withTimeoutOrNull(AUTH_TIMEOUT_MS) { authResult.await() } == true
+            if (!authenticated) return@withContext false
             val bytes = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
             if (bytes.size !in 1..MAX_FRAME_BYTES) return@withContext false
             runCatching {
@@ -210,6 +222,7 @@ class BluetoothClassicMeshTransport(
         val expectedId = expectedFingerprint.replace(":", "").take(16).lowercase()
         if (fingerprint != expectedFingerprint || suppliedId != expectedId) return
         sockets[expectedId] = socket
+        authentication.getOrPut(socket) { CompletableDeferred() }.complete(true)
         eventsFlow.emit(
             TransportEvent.PeerFound(
                 DiscoveredEndpoint(
@@ -232,12 +245,15 @@ class BluetoothClassicMeshTransport(
         server = null
         sockets.values.forEach { runCatching { it.close() } }
         sockets.clear()
+        authentication.values.forEach { it.complete(false) }
+        authentication.clear()
 
     }
 
     companion object {
         private const val SERVICE_NAME = "MeshLink RFCOMM"
         private const val MAX_FRAME_BYTES = 256 * 1024
+        private const val AUTH_TIMEOUT_MS = 8_000L
         private val SERVICE_UUID: UUID = UUID.fromString("7c6f2a10-8f4b-4c2d-9a71-4d4553484c4b")
     }
 }
