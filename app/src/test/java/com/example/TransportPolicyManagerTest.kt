@@ -50,6 +50,28 @@ class TransportPolicyManagerTest {
     }
 
     @Test
+    fun userDefinedTransportOrderControlsPrimaryPath() {
+        val policy = TransportPolicy(
+            mode = TransportSelectionMode.PREFER,
+            preferred = listOf(TransportType.WIFI_DIRECT, TransportType.LOCAL_LAN, TransportType.BLE),
+            allowFallback = true
+        )
+        val plan = manager.plan(
+            "node_a",
+            "node_b",
+            listOf(
+                AvailableTransport(TransportType.LOCAL_LAN, true, true, 100),
+                AvailableTransport(TransportType.BLE, true, true, 100),
+                AvailableTransport(TransportType.WIFI_DIRECT, true, true, 100)
+            ),
+            policy
+        ) as DeliveryPlan.Network
+
+        assertEquals(TransportType.WIFI_DIRECT, plan.primary)
+        assertEquals(listOf(TransportType.LOCAL_LAN, TransportType.BLE), plan.fallback)
+    }
+
+    @Test
     fun strictOnlyModeNeverReturnsFallback() {
         val policy = TransportPolicy(
             mode = TransportSelectionMode.ONLY,
