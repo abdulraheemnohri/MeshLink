@@ -123,3 +123,12 @@ Bluetooth Classic is registered as an adapter but is not automatically started b
 ## Capability boundary reminder
 
 NFC is for short-range identity/bootstrap handoff, not continuous mesh data transport. LoRa and satellite require compatible external hardware/gateways. Android background radio behavior is OEM- and permission-dependent. Release signing requires the owner's private keystore and must never be committed to Git.
+
+
+## Live discovery dashboard integration (2026-11-17)
+
+- The app-scoped universal discovery coordinator now publishes transport-specific endpoint records to the discovery UI through `MeshViewModel.discoveredEndpoints`.
+- The Nearby Mesh Nodes screen now renders a Live Transport Paths panel grouped by peer identity, showing each observed transport, endpoint address/port when available, and age of the last observation.
+- This panel reports discovery observations only; it does not imply that a peer is authenticated, connected, or currently reachable. Existing peer connection and trust state remain separate.
+- CI previously compiled the debug APK but rejected `UniversalDiscoveryCoordinatorTest` as an invalid JUnit test class. The test coroutine result type was made explicit with `runBlocking<Unit>`; the resulting workflow is being re-checked.
+- Device-level validation is still required for LAN, BLE, Wi-Fi Direct, and Wi-Fi Aware radios, especially Android permission and background restrictions.
