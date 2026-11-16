@@ -105,3 +105,8 @@ NFC status remains identity import through Android NDEF-discovered URI intents. 
 - A transport disconnect removes only that transport's endpoint. Other live paths to the same peer remain usable.
 - The dispatcher never reuses a BLE address as an IP address or passes a Wi-Fi Direct locator to the LAN adapter.
 - This is multi-path failover, not simultaneous multipath bonding. It does not create missing endpoints or bypass Android permissions, radio availability or hardware limitations.
+
+
+### Wired and tethered local-network support
+
+The Local LAN adapter's interface allow-list now includes common Android interface prefixes for Ethernet and USB tethering (eth, en, usb, rndis, and br) in addition to Wi-Fi, hotspot and Wi-Fi Direct interfaces. These paths still require private IPv4 addressing, local broadcast reachability and Android/OEM interface exposure. This does not create a link where the OS or tethering topology blocks peer-to-peer traffic.
