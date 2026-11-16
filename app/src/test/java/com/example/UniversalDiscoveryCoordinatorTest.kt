@@ -60,7 +60,7 @@ class UniversalDiscoveryCoordinatorTest {
     )
 
     @Test
-    fun retainsSeparatePathsForSamePeerAndKeepsNewestPathPerTransport() = runBlocking {
+    fun retainsSeparatePathsForSamePeerAndKeepsNewestPathPerTransport() = runBlocking<Unit> {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val lan = FakeTransport(TransportType.LOCAL_LAN)
         val ble = FakeTransport(TransportType.BLE)
@@ -82,7 +82,7 @@ class UniversalDiscoveryCoordinatorTest {
     }
 
     @Test
-    fun prunesOnlyExpiredPathsAndRemovesPeerWhenNoPathsRemain() = runBlocking {
+    fun prunesOnlyExpiredPathsAndRemovesPeerWhenNoPathsRemain() = runBlocking<Unit> {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val lan = FakeTransport(TransportType.LOCAL_LAN)
         val coordinator = UniversalDiscoveryCoordinator(listOf(lan), scope, staleAfterMs = 100L)
@@ -100,7 +100,7 @@ class UniversalDiscoveryCoordinatorTest {
     }
 
     @Test
-    fun explicitSelectionNeverStartsDisabledAdapter() = runBlocking {
+    fun explicitSelectionNeverStartsDisabledAdapter() = runBlocking<Unit> {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val lan = FakeTransport(TransportType.LOCAL_LAN)
         val ble = FakeTransport(TransportType.BLE)
@@ -120,7 +120,7 @@ class UniversalDiscoveryCoordinatorTest {
     }
 
     @Test
-    fun adapterFailuresDoNotPreventOtherRadiosStarting() = runBlocking {
+    fun adapterFailuresDoNotPreventOtherRadiosStarting() = runBlocking<Unit> {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val failed = FakeTransport(TransportType.BLE, failStart = true)
         val working = FakeTransport(TransportType.LOCAL_LAN)
