@@ -28,6 +28,7 @@ import com.example.location.RelativeVector
 import com.example.security.BiometricManager
 import com.example.voice.VoiceRecordingItem
 import com.example.transport.TransportPolicy
+import com.example.transport.DiscoveredEndpoint
 import com.example.transport.TransportSelectionMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -50,6 +51,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     private val transportPolicyManager = container.transportPolicyManager
     private val _transportPolicy = MutableStateFlow(transportPolicyManager.load())
     val transportPolicy: StateFlow<TransportPolicy> = _transportPolicy.asStateFlow()
+    /** Live transport-specific paths observed by the app-scoped discovery coordinator. */
+    val discoveredEndpoints: StateFlow<List<DiscoveredEndpoint>> = container.discoveryCoordinator.peers
     val biometricManager: BiometricManager = container.biometricManager
 
     val identity: StateFlow<DeviceIdentityEntity?> = repository.identityFlow
