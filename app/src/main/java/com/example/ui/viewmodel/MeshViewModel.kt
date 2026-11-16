@@ -48,7 +48,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     private val voiceManager = container.voiceAudioManager
     private val locationManager = container.locationSharingManager
     private val transportPolicyManager = container.transportPolicyManager
-    val transportPolicy: StateFlow<TransportPolicy> = MutableStateFlow(transportPolicyManager.load())
+    private val _transportPolicy = MutableStateFlow(transportPolicyManager.load())
+    val transportPolicy: StateFlow<TransportPolicy> = _transportPolicy.asStateFlow()
     val biometricManager: BiometricManager = container.biometricManager
 
     val identity: StateFlow<DeviceIdentityEntity?> = repository.identityFlow
@@ -222,7 +223,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateTransportPolicy(policy: TransportPolicy) {
         transportPolicyManager.save(policy)
-        (transportPolicy as MutableStateFlow).value = policy
+        _transportPolicy.value = policy
     }
 
     fun buildLocalIdentityUri(): String {
