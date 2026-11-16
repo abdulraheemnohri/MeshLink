@@ -26,7 +26,12 @@ class AppContainer(context: Context) {
 
     val lanTransport = LanMeshTransport(appContext) { crypto.ensureLocalIdentity() }
     val bleTransport = BleMeshTransport(appContext) { crypto.ensureLocalIdentity() }
-    val bluetoothClassicTransport = BluetoothClassicMeshTransport(appContext) { crypto.ensureLocalIdentity() }
+    val bluetoothClassicTransport = BluetoothClassicMeshTransport(
+        appContext,
+        { crypto.ensureLocalIdentity() },
+        { packet -> crypto.signPacket(packet) },
+        { packet, signingPublicKey -> crypto.verifyPacketSignature(packet, signingPublicKey) }
+    )
     val wifiDirectTransport = WifiDirectTransport(appContext)
     val wifiAwareTransport = WifiAwareTransport(appContext) { crypto.ensureLocalIdentity() }
 
