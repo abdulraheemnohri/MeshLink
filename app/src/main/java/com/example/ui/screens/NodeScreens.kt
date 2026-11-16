@@ -64,6 +64,7 @@ import com.example.core.permissions.HardwareCapabilities
 import com.example.core.protocol.RoutingStrategy
 import com.example.core.protocol.TransportType
 import com.example.transport.TransportPolicy
+import com.example.transport.TransportHealthSnapshot
 import com.example.transport.TransportSelectionMode
 import com.example.data.entities.DeviceIdentityEntity
 import com.example.data.entities.NetworkEventEntity
@@ -506,6 +507,7 @@ fun RoutingScreen(
 @Composable
 fun DiagnosticsScreen(
     capabilities: HardwareCapabilityReport,
+    transportHealth: List<TransportHealthSnapshot> = emptyList(),
     isRelayRunning: Boolean,
     loopbackResult: String?,
     networkEvents: List<NetworkEventEntity>,
@@ -549,6 +551,21 @@ fun DiagnosticsScreen(
                     CapabilityRow("Nearby Wi-Fi permission", capabilities.hasNearbyWifiPermission, if (capabilities.hasNearbyWifiPermission) "Granted" else "Grant Nearby Wi-Fi")
                     CapabilityRow("Notifications", capabilities.hasNotificationPermission, if (capabilities.hasNotificationPermission) "Granted" else "Notification permission missing")
                     CapabilityRow("Foreground Relay", isRelayRunning, if (isRelayRunning) "Running" else "Stopped")
+                    Spacer(Modifier.height(12.dp))
+                    SectionTitle(title = "Transport Runtime Health")
+                    if (transportHealth.isEmpty()) {
+                        Text("No transport adapters are registered.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        transportHealth.forEach { status ->
+                            val detail = when {
+                                !status.lastError.isNullOrBlank() -> "Error: ${status.lastError}"
+                                status.running && status.lastDiscoveryAt != null -> "Running · Last scan " + SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(status.lastDiscoveryAt))
+                                status.running -> "Running · Not scanned yet"
+                                else -> "Stopped"
+                            }
+                            CapabilityRow(status.transportType.name, status.running && status.lastError.isNullOrBlank(), detail)
+                        }
+                    }
 
                     Spacer(Modifier.height(10.dp))
                     OutlinedButton(
