@@ -13,6 +13,10 @@ import com.example.transport.BluetoothClassicMeshTransport
 import com.example.transport.LanMeshTransport
 import com.example.transport.WifiAwareTransport
 import com.example.transport.WifiDirectTransport
+import com.example.transport.UniversalDiscoveryCoordinator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import com.example.voice.VoiceAudioManager
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -34,6 +38,12 @@ class AppContainer(context: Context) {
     )
     val wifiDirectTransport = WifiDirectTransport(appContext)
     val wifiAwareTransport = WifiAwareTransport(appContext) { crypto.ensureLocalIdentity() }
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val discoveryCoordinator = UniversalDiscoveryCoordinator(
+        listOf(lanTransport, wifiDirectTransport, wifiAwareTransport, bleTransport, bluetoothClassicTransport),
+        appScope
+    )
 
     val routingEngine = MeshRoutingEngine(appContext, repository, crypto).apply {
         registerTransports(
