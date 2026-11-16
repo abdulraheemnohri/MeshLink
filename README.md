@@ -26,6 +26,9 @@ MeshLink is an Android-first, offline-first peer-to-peer communication project. 
 - Bounded packet framing and chunked file transfer.
 - Store-and-forward and hop-limited routing.
 - Peer identity verification and encrypted local storage.
+- Same-network WLAN/LAN and compatible hotspot networking.
+- Automatic best-available transport fallback across registered adapters.
+- NFC / QR identity bootstrap (not general-purpose continuous data links).
 - Diagnostics and transport capability reporting.
 
 The implementation status of each capability must be verified using the acceptance criteria in `docs/IMPLEMENTATION_STATUS.md`.
@@ -76,6 +79,7 @@ A GitHub Actions workflow is provided at `.github/workflows/android-ci.yml`. It 
 
 ## Development documentation
 
+- [Networking modes, supported transports and selection policy](docs/NETWORKING_MATRIX.md)
 - [Architecture and implementation status](docs/IMPLEMENTATION_STATUS.md)
 - [Automated and physical-device test plan](docs/TEST_PLAN.md)
 - [Security policy](SECURITY.md), when present in this repository
