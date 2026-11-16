@@ -153,3 +153,10 @@ After successful verification, the live RFCOMM socket is indexed by the cryptogr
 ## RFCOMM authentication gate
 
 RFCOMM now tracks authentication per live socket. Data packets are delivered to the routing layer only after a signed HELLO has passed public-key signature verification and the peer ID/fingerprint binding checks. Frames received before authentication are dropped and logged. Outbound packet sends wait up to eight seconds for the socket's identity verification result and fail closed on timeout. Closing or stopping the transport clears pending authentication state. This is a fail-closed identity gate; it does not replace the planned nonce-based replay defense and ephemeral ECDH session establishment.
+
+
+## RFCOMM HELLO freshness and replay defense
+
+Signed HELLO frames must now pass signature verification, a required integrity-hash comparison, a 60-second creation-time window, expiry checks and a bounded in-memory message-ID replay cache before the peer is accepted. The cache retains up to 2,048 recent IDs and prunes entries older than two minutes. Unit tests cover duplicate IDs, expired/stale messages, future timestamps and distinct fresh handshakes.
+
+This reduces replay risk during process lifetime. A fresh nonce challenge/response and ephemeral ECDH-derived session keys are still required for a production forward-secret channel; clock-based freshness alone is not a substitute.
