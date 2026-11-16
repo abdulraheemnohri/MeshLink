@@ -54,7 +54,7 @@ class BluetoothClassicMeshTransport(
     private val handshakeReplayGuard = HandshakeReplayGuard()
     private val peerSigningKeys = ConcurrentHashMap<BluetoothSocket, String>()
     private val peerIdentityIds = ConcurrentHashMap<BluetoothSocket, String>()
-    private val outstandingChallenges = ConcurrentHashMap<BluetoothSocket, Pair<String, String>>()
+    private val outstandingChallenges = ConcurrentHashMap<BluetoothSocket, Triple<String, String, Long>>()
     @Volatile private var server: BluetoothServerSocket? = null
     @Volatile override var isRunning = false
         private set
@@ -257,7 +257,7 @@ class BluetoothClassicMeshTransport(
                 )
             )
         )
-        eventsFlow.emit(TransportEvent.Log(transportType, "IDENTITY_VERIFIED", "Authenticated MeshLink identity $expectedId"))
+        eventsFlow.emit(TransportEvent.Log(transportType, "IDENTITY_CLAIM_VERIFIED", "Verified MeshLink identity claim; nonce proof is pending for $expectedId"))
     }
 
     /**
@@ -295,7 +295,7 @@ class BluetoothClassicMeshTransport(
         if (bytes.size !in 1..MAX_FRAME_BYTES) return
         if (phase == "challenge") {
             // Publish the expected proof before writing: the peer may respond immediately.
-            outstandingChallenges[socket] = signed.messageId to nonce
+            outstandingChallenges[socket] = Triple(signed.messageId, nonce, System.currentTimeMillis())
         }
         val output = DataOutputStream(socket.outputStream)
         synchronized(socket) {
@@ -336,6 +336,15 @@ class BluetoothClassicMeshTransport(
             }
             "response" -> {
                 val expected = outstandingChallenges[socket] ?: return
+                val challengeAgeMs = System.currentTimeMillis() - expected.third
+                if (challengeAgeMs !in 0..CHALLENGE_TIMEOUT_MS) {
+                    outstandingChallenges.remove(socket, expected)
+                    eventsFlow.emit(TransportEvent.Log(
+                        transportType, "CHALLENGE_RESPONSE_TIMEOUT",
+                        "Rejected an expired Bluetooth nonce response"
+                    ))
+                    return
+                }
                 if (payload.optString("challengeId") != expected.first || nonce != expected.second) return
                 outstandingChallenges.remove(socket, expected)
                 authentication.getOrPut(socket) { CompletableDeferred() }.complete(true)
@@ -365,6 +374,7 @@ class BluetoothClassicMeshTransport(
         private const val SERVICE_NAME = "MeshLink RFCOMM"
         private const val MAX_FRAME_BYTES = 256 * 1024
         private const val AUTH_TIMEOUT_MS = 8_000L
+        private const val CHALLENGE_TIMEOUT_MS = 60_000L
         private val SERVICE_UUID: UUID = UUID.fromString("7c6f2a10-8f4b-4c2d-9a71-4d4553484c4b")
     }
 }
