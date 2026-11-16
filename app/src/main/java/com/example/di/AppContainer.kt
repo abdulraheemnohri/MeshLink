@@ -37,6 +37,7 @@ class AppContainer(context: Context) {
     val fileTransferManager = FileTransferManager(appContext, repository, crypto, routingEngine)
     val voiceAudioManager = VoiceAudioManager(appContext, routingEngine)
     val locationSharingManager = LocationSharingManager(appContext)
+    val transportPolicyManager = com.example.transport.TransportPolicyManager(appContext)
 
     val isRelayRunning = MutableStateFlow(false)
 }
