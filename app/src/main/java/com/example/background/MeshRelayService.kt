@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.MeshLinkApplication
 import com.example.di.AppContainer
+import com.example.core.protocol.TransportType
 import com.example.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,10 +56,16 @@ class MeshRelayService : Service() {
                     val settings = container.repository.getSettingsOnce()
                     container.repository.ensureInitialized()
 
-                    if (settings.localLanEnabled) runCatching { container.lanTransport.start() }
-                    if (settings.bleEnabled) runCatching { container.bleTransport.start() }
-                    if (settings.wifiDirectEnabled) runCatching { container.wifiDirectTransport.start() }
-                    if (settings.wifiAwareEnabled) runCatching { container.wifiAwareTransport.start() }
+                    val enabledTransports = buildSet {
+                        if (settings.localLanEnabled) add(TransportType.LOCAL_LAN)
+                        if (settings.bleEnabled) add(TransportType.BLE)
+                        if (settings.wifiDirectEnabled) add(TransportType.WIFI_DIRECT)
+                        if (settings.wifiAwareEnabled) add(TransportType.WIFI_AWARE)
+                    }
+                    // Start only radios enabled by the user's settings. A failure on one
+                    // adapter is isolated by the coordinator and does not block others.
+                    container.discoveryCoordinator.start(enabledTransports)
+                    container.discoveryCoordinator.discoverAll()
 
                     container.isRelayRunning.value = true
                     startMaintenance(container)
@@ -125,10 +132,9 @@ class MeshRelayService : Service() {
     }
 
     private suspend fun stopTransports(container: AppContainer) {
-        runCatching { container.lanTransport.stop() }
-        runCatching { container.bleTransport.stop() }
-        runCatching { container.wifiDirectTransport.stop() }
-        runCatching { container.wifiAwareTransport.stop() }
+        // The coordinator owns the registered adapter lifecycle, including adapters
+        // that may be added later. Stop failures remain isolated per transport.
+        container.discoveryCoordinator.stopAll()
     }
 
     private fun createNotificationChannel() {
