@@ -55,3 +55,32 @@ Current implementation note: MeshRoutingEngine already prefers the endpoint's di
 Before marking a path release-ready, test two physical phones in both directions, then a three-phone relay scenario where applicable. Record Android versions, OEM, chipset, permission state, network topology, packet sizes, transfer hashes, reconnect behavior and battery impact in [DEVICE_TEST_CHECKLIST.md](DEVICE_TEST_CHECKLIST.md).
 
 MeshLink is best-effort communication software. It must not be represented as guaranteed emergency, medical, or public-safety infrastructure.
+
+
+## Transport policy implementation status (November 2026)
+
+A persistent SharedPreferences-backed `TransportPolicyManager` is now part of the app container. It supports:
+
+- Automatic mode: rank currently running, discovered and payload-compatible adapters by configured preference, recent failures and RSSI.
+- Prefer mode: use the configured preference order; fallback is controlled by the policy.
+- Only mode: strict selection; never returns a fallback transport.
+- Disabled adapters: excluded from candidate selection.
+- Same-device destination: returns a local-device delivery plan without requiring a radio.
+- Oversized payloads, stopped adapters, undiscovered endpoints and repeated failures are excluded.
+
+The manager is a policy component. The routing engine still needs to consume its plan at the packet-dispatch call site and the settings UI must expose/save the policy before these controls are considered end-to-end shipped. The manager has unit coverage for policy decisions.
+
+### Network types versus actual adapters
+
+The following are separate concepts, not all independent radio protocols:
+
+- Same device: local in-process delivery; no network or radio.
+- Same Wi-Fi / WLAN / LAN: IP connectivity carried by the active Wi-Fi interface and Local LAN adapter.
+- Hotspot: an IP subnet exposed by a phone; uses Local LAN when interface discovery and routing permit.
+- USB tethering / Ethernet: IP connectivity; can use Local LAN if Android exposes the interface.
+- Wi-Fi Direct and Wi-Fi Aware: dedicated Android peer-to-peer paths.
+- BLE: dedicated GATT path.
+- NFC and QR: short-range / optical bootstrap, not continuous mesh data transports.
+- Bluetooth Classic RFCOMM and Google Nearby Connections: not registered data adapters yet.
+- Cellular / Internet / satellite: gateway paths, not direct offline phone-to-phone links.
+- LoRa / Zigbee / Thread / Wi-Fi HaLow: external-radio gateway integrations, not phone-native transports.
