@@ -18,6 +18,7 @@ import com.example.data.repository.MeshRepository
 import com.example.transport.DiscoveredEndpoint
 import com.example.transport.MeshTransport
 import com.example.transport.TransportEvent
+import com.example.transport.permitsFallback
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
