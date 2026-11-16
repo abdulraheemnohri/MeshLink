@@ -1110,7 +1110,14 @@ class MeshRoutingEngine(
         return endpointPaths[peerId]?.values
             ?.filter { it.transportType !in policy.disabled }
             ?.filter { ep -> transports.any { it.transportType == ep.transportType && it.isRunning } }
-            ?.filter { policy.mode != com.example.transport.TransportSelectionMode.ONLY || it.transportType in policy.preferred }
+            ?.filter {
+                policy.mode != com.example.transport.TransportSelectionMode.ONLY ||
+                    it.transportType in policy.preferred
+            }
+            ?.filter {
+                policy.mode != com.example.transport.TransportSelectionMode.PREFER ||
+                    policy.allowFallback || it.transportType in policy.preferred
+            }
             ?.minWithOrNull(
                 compareBy<DiscoveredEndpoint> { preference[it.transportType] ?: Int.MAX_VALUE }
                     .thenByDescending { it.rssiDbm }
