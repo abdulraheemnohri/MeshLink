@@ -96,7 +96,7 @@ class UniversalDiscoveryCoordinatorTest {
         assertTrue(coordinator.endpointsFor("peer-1").isEmpty())
         assertTrue(coordinator.peers.value.isEmpty())
         coordinator.close()
-        scope.coroutineContext[SupervisorJob]?.cancel()
+        scope.coroutineContext[Job]?.cancel()
     }
 
     @Test
@@ -136,6 +136,6 @@ class UniversalDiscoveryCoordinatorTest {
         assertFalse(scanResults.containsKey(TransportType.BLE))
         coordinator.stopAll()
         coordinator.close()
-        scope.coroutineContext[SupervisorJob]?.cancel()
+        scope.coroutineContext[Job]?.cancel()
     }
 }
