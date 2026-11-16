@@ -8,6 +8,7 @@ import com.example.transport.DeliveryPlan
 import com.example.transport.TransportPolicy
 import com.example.transport.TransportPolicyManager
 import com.example.transport.TransportSelectionMode
+import com.example.transport.permitsFallback
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
