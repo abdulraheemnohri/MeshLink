@@ -62,6 +62,13 @@ class UniversalDiscoveryCoordinator(
         return results
     }
 
+    /** Connects through the adapter that owns this endpoint's transport. */
+    suspend fun connect(endpoint: DiscoveredEndpoint): Result<Boolean> {
+        val adapter = adapters.firstOrNull { it.transportType == endpoint.transportType }
+            ?: return Result.failure(IllegalArgumentException("No adapter for " + endpoint.transportType))
+        return runCatching { adapter.connect(endpoint) }
+    }
+
     suspend fun discoverAll(): Map<TransportType, Result<Unit>> {
         val results = linkedMapOf<TransportType, Result<Unit>>()
         adapters.filter { it.isRunning }.forEach { adapter ->
