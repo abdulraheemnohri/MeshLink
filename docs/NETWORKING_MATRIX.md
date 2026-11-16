@@ -84,3 +84,14 @@ The following are separate concepts, not all independent radio protocols:
 - Bluetooth Classic RFCOMM and Google Nearby Connections: not registered data adapters yet.
 - Cellular / Internet / satellite: gateway paths, not direct offline phone-to-phone links.
 - LoRa / Zigbee / Thread / Wi-Fi HaLow: external-radio gateway integrations, not phone-native transports.
+
+
+## End-to-end source integration update
+
+- Transport selection policy is persisted with Android SharedPreferences and exposed through the app container and ViewModel.
+- Settings now exposes Automatic, Prefer and Only modes, fallback control, and per-transport enable/disable preferences.
+- Packet dispatch enforces disabled transports and strict Only mode. It deliberately does not pass a BLE address, LAN IP or Wi-Fi Direct locator to a different adapter as a fake fallback; a fallback requires a separately discovered endpoint for that peer and transport.
+- Packets addressed to the local device are handled as local loopback delivery and marked delivered without opening a radio.
+- Policy tests cover local-device selection, preference ranking, strict mode, payload-size rejection, disabled transports, persistence and fallback disabling.
+
+NFC status remains identity import through Android NDEF-discovered URI intents. Android Beam phone-to-phone NDEF push is not available on modern Android releases; therefore MeshLink does not claim that two phones can exchange arbitrary data simply by tapping. NFC remains a bootstrap path and QR remains the universal fallback.
