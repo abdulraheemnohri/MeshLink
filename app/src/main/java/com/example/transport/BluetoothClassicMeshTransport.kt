@@ -374,7 +374,11 @@ class BluetoothClassicMeshTransport(
                 }
                 if (payload.optString("challengeId") != expected.first || nonce != expected.second) return
                 outstandingChallenges.remove(socket, expected)
-                authentication.getOrPut(socket) { CompletableDeferred() }.complete(true)
+                val newlyAuthenticated = authentication.getOrPut(socket) { CompletableDeferred() }.complete(true)
+                if (newlyAuthenticated) {
+                    val address = socket.remoteDevice?.address.orEmpty()
+                    eventsFlow.emit(TransportEvent.ConnectionChanged(expectedPeerId, transportType, true, address))
+                }
                 eventsFlow.emit(TransportEvent.Log(
                     transportType, "MUTUAL_IDENTITY_PROOF_COMPLETE",
                     "Peer proved possession of its MeshLink signing key"
