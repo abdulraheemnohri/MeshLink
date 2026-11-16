@@ -46,5 +46,8 @@ interface MeshTransport {
     suspend fun start()
     suspend fun stop()
     suspend fun triggerDiscovery()
+    /** Establishes an authenticated transport session without sending application data. */
+    suspend fun connect(endpoint: DiscoveredEndpoint): Boolean = false
+
     suspend fun sendPacket(endpoint: DiscoveredEndpoint, packet: MeshPacket): Boolean
 }
