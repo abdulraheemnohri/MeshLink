@@ -42,7 +42,14 @@ class HandshakeReplayGuardTest {
         assertFalse(guard.accept(packet(createdAt = 200_000L, expiresAt = 260_000L), now = 100_000L))
     }
 
-    @Test fun rejectsNonHelloPackets() {
+    @Test fun acceptsFreshChallengeFramesOnceOnly() {
+        val guard = HandshakeReplayGuard()
+        val challenge = packet(id = "challenge-1", type = PacketType.PEER_HANDSHAKE)
+        assertTrue(guard.accept(challenge, now = 100_000L))
+        assertFalse(guard.accept(challenge, now = 100_000L))
+    }
+
+    @Test fun rejectsNonHandshakePackets() {
         val guard = HandshakeReplayGuard()
         assertFalse(guard.accept(packet(type = PacketType.MESSAGE), now = 100_000L))
     }
