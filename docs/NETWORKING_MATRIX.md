@@ -148,3 +148,8 @@ RFCOMM bonded-device discovery currently yields an Android Bluetooth address, no
 The Bluetooth Classic adapter now exchanges a signed MeshLink HELLO frame when an RFCOMM socket is established. The HELLO carries the local MeshLink device ID, alias, signing public key, agreement public key and identity fingerprint. The receiver verifies the packet signature with the presented signing key, independently recomputes the fingerprint and checks that the sender ID is derived from that fingerprint before emitting a peer-discovery event. Unverified bonded-device MAC addresses remain discovery hints only and are never accepted as MeshLink identities.
 
 After successful verification, the live RFCOMM socket is indexed by the cryptographic MeshLink peer ID so routing can reuse the authenticated connection. This is an authenticated identity exchange, not a full forward-secret session protocol: the next security layer should add a fresh challenge/response, replay protection and an ephemeral ECDH session key before treating RFCOMM as production-hardened.
+
+
+## RFCOMM authentication gate
+
+RFCOMM now tracks authentication per live socket. Data packets are delivered to the routing layer only after a signed HELLO has passed public-key signature verification and the peer ID/fingerprint binding checks. Frames received before authentication are dropped and logged. Outbound packet sends wait up to eight seconds for the socket's identity verification result and fail closed on timeout. Closing or stopping the transport clears pending authentication state. This is a fail-closed identity gate; it does not replace the planned nonce-based replay defense and ephemeral ECDH session establishment.
