@@ -59,6 +59,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.core.permissions.HardwareCapabilityReport
 import com.example.core.protocol.RoutingStrategy
+import com.example.core.protocol.TransportType
+import com.example.transport.TransportPolicy
+import com.example.transport.TransportSelectionMode
 import com.example.data.entities.DeviceIdentityEntity
 import com.example.data.entities.NetworkEventEntity
 import com.example.data.entities.PeerEntity
@@ -639,6 +642,8 @@ fun SettingsScreen(
     onToggleRelay: (Boolean) -> Unit,
     onToggleBiometric: (Boolean) -> Unit = {},
     onLockNow: () -> Unit = {},
+    transportPolicy: TransportPolicy = TransportPolicy(),
+    onUpdateTransportPolicy: (TransportPolicy) -> Unit = {},
     onUpdateSettings: ((SettingsEntity) -> SettingsEntity) -> Unit
 ) {
     var emergencyDraft by remember(settings.emergencyMessage) { mutableStateOf(settings.emergencyMessage) }
@@ -771,6 +776,66 @@ fun SettingsScreen(
                     ) {
                         Text("Save SOS Template")
                     }
+                }
+            }
+
+            item {
+                GlassPanel(accentColor = ElectricTeal) {
+                    SectionTitle(
+                        title = "Universal Network Manager",
+                        subtitle = "Choose how MeshLink selects real, discovered transport adapters"
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            TransportSelectionMode.AUTOMATIC,
+                            TransportSelectionMode.PREFER,
+                            TransportSelectionMode.ONLY
+                        ).forEach { mode ->
+                            FilterChip(
+                                selected = transportPolicy.mode == mode,
+                                onClick = { onUpdateTransportPolicy(transportPolicy.copy(mode = mode)) },
+                                label = { Text(mode.name) }
+                            )
+                        }
+                    }
+                    SettingSwitchRow(
+                        title = "Allow fallback",
+                        subtitle = "Only applies to Automatic and Prefer modes",
+                        checked = transportPolicy.allowFallback,
+                        onCheckedChange = { onUpdateTransportPolicy(transportPolicy.copy(allowFallback = it)) }
+                    )
+                    Text("Enabled transport preferences", style = MaterialTheme.typography.titleSmall)
+                    listOf(
+                        TransportType.LOCAL_LAN to "Same WLAN / LAN / compatible hotspot",
+                        TransportType.WIFI_DIRECT to "Wi-Fi Direct",
+                        TransportType.WIFI_AWARE to "Wi-Fi Aware",
+                        TransportType.BLE to "Bluetooth LE",
+                        TransportType.HOTSPOT to "Hotspot (LAN adapter path)",
+                        TransportType.NFC to "NFC identity handoff (not a data transport)",
+                        TransportType.QR to "QR identity handoff (not a data transport)",
+                        TransportType.BLUETOOTH_CLASSIC to "Bluetooth Classic (adapter not yet registered)"
+                    ).forEach { (type, label) ->
+                        SettingSwitchRow(
+                            title = label,
+                            subtitle = if (type in setOf(TransportType.NFC, TransportType.QR, TransportType.BLUETOOTH_CLASSIC))
+                                "Capability / bootstrap only; not currently a registered packet transport"
+                            else "Preference only; requires supported hardware, permission and a discovered endpoint",
+                            checked = type !in transportPolicy.disabled,
+                            onCheckedChange = { enabled ->
+                                onUpdateTransportPolicy(
+                                    transportPolicy.copy(
+                                        disabled = if (enabled) transportPolicy.disabled - type
+                                        else transportPolicy.disabled + type
+                                    )
+                                )
+                            }
+                        )
+                    }
+                    Text(
+                        "Same-device delivery is handled locally without Bluetooth or Wi-Fi. WLAN, LAN and hotspot share the Local LAN IP adapter.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
