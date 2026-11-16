@@ -10,7 +10,7 @@ This document separates implemented source code from capabilities that have been
 | Wi-Fi Aware | Bounded fragmentation/reassembly and per-frame framework send callbacks | Framework send success is not remote application delivery; test NAN availability, peer-handle lifecycle and packet-level ACK behavior on supported devices |
 | Wi-Fi Direct | Group-owner/client role tracking; periodic best-effort client IP lookup from ARP; TCP acceptance response through the LAN listener | ARP access and DHCP mapping are OEM-dependent; prove both directions on physical phones |
 | Local LAN / WLAN | Length-bounded TCP frames, UDP discovery, private-IPv4 filtering, bounded clients and per-peer rate limits; intended for same-network Wi-Fi and compatible hotspot subnets | Same-network discovery may be blocked by AP/client isolation; validate Wi-Fi, hotspot, USB tethering and Ethernet interfaces on real devices |
-| NFC / QR | NFC permission/intent declaration and identity URI encode/import; QR identity exchange exists | NFC NDEF read/write handoff is not verified as an end-to-end transport; bootstrap only, not continuous data transfer |\n| Bluetooth Classic / Nearby Connections | Transport enum entries / platform capability concepts only | No verified RFCOMM or Google Nearby Connections adapter is registered; do not claim support until implemented and tested |\n| File transfer | Chunk hashes, receiver chunk ACKs, resumable incomplete-chunk reads, final size/SHA-256 verification, bounded file size and sanitized names | Automated integration tests, restart tests, duplicate/reordered chunk tests and two-device validation |
+| NFC / QR | NFC permission/intent declaration and identity URI encode/import; QR identity exchange exists | NFC NDEF read/write handoff is not verified as an end-to-end transport; bootstrap only, not continuous data transfer |\n| Bluetooth Classic / Nearby Connections | Bluetooth Classic RFCOMM adapter is registered; explicit connect uses paired devices and authenticated identity handshake | RFCOMM still needs two-device acceptance testing; Google Nearby Connections adapter is not implemented |\n| File transfer | Chunk hashes, receiver chunk ACKs, resumable incomplete-chunk reads, final size/SHA-256 verification, bounded file size and sanitized names | Automated integration tests, restart tests, duplicate/reordered chunk tests and two-device validation |
 | Peer identity | Signed first handshake, trust-on-first-use key consistency checks, unknown non-handshake packet rejection and bidirectional endpoint mapping | QR fingerprint verification remains necessary to authenticate identity out of band; static ECDH is not forward-secret |
 | Routing | Bounded in-memory replay cache, expiry pruning, persisted remaining Spray-and-Wait budget and route-aware queue flushing | Cache is not durable across process restart; physical three-node relay tests and queue policy tests remain required |
 
@@ -94,7 +94,7 @@ No release should be described as production-ready until the build, unit tests, 
 
 The persisted Automatic / Prefer / Only transport policy is now exposed in Settings and ViewModel. The packet dispatcher enforces disabled transport preferences and strict Only mode. It avoids cross-adapter fallback using an incompatible endpoint locator. Same-device destinations are handled as local loopback delivery without a radio. Unit tests cover persistence, strict mode, preference ranking, disabled transports, payload limits and fallback control.
 
-NFC identity URI import is wired through the existing NDEF_DISCOVERED intent handler. This is bootstrap only; Android Beam is deprecated/removed on modern Android and no arbitrary NFC phone-to-phone data transport is claimed. Bluetooth Classic RFCOMM and Google Nearby Connections remain unregistered adapters and must not be presented as operational.
+NFC identity URI import is wired through the existing NDEF_DISCOVERED intent handler. This is bootstrap only; Android Beam is deprecated/removed on modern Android and no arbitrary NFC phone-to-phone data transport is claimed. Bluetooth Classic RFCOMM is registered and has a source-level authenticated connect path, but remains unverified on physical devices. Google Nearby Connections remains unimplemented.
 
 
 ## Multi-path transport failover update
@@ -163,3 +163,12 @@ NFC is for short-range identity/bootstrap handoff, not continuous mesh data tran
 - Added coordinator tests for transport-specific connect dispatch and provisional-to-authenticated identity replacement.
 - Scan Now uses the coordinator's running-adapter set, preventing disabled transports from receiving discovery triggers.
 - CI for this final batch must be checked against the latest main commit before release. No physical-device acceptance run has been performed from this environment.
+
+
+## Transport runtime health (2026-11-17)
+
+- The discovery coordinator now publishes a `TransportHealthSnapshot` for each registered adapter.
+- Snapshots expose current running state, last successful start time, last successful discovery time, and the latest start/discovery/stop error.
+- The ViewModel exposes the health stream and the Diagnostics screen displays each adapter's runtime state and last scan time.
+- Unit coverage verifies successful startup and scan timestamps, failed adapter startup reporting, and stopped-state updates.
+- This is runtime lifecycle telemetry, not proof of peer reachability or successful end-to-end packet delivery. Physical-device acceptance remains required.
