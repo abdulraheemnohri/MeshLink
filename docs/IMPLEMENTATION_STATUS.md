@@ -112,11 +112,13 @@ NFC identity URI import is wired through the existing NDEF_DISCOVERED intent han
 The routing dispatcher now treats `ONLY` as a strict single-path mode: even when the persisted fallback toggle is true, it attempts only the highest-ranked selected transport. `PREFER` and `AUTOMATIC` continue to honor the fallback toggle. The policy rule is centralized in `TransportPolicy.permitsFallback()` and covered by unit tests. This is a source-level fix; CI and physical-device delivery still need to pass before claiming verified behavior.
 
 
-## Universal discovery coordinator — source added
+## Universal discovery coordinator — relay lifecycle integration
 
-`UniversalDiscoveryCoordinator` now coordinates start, scan and stop operations across an explicitly supplied list of registered `MeshTransport` adapters. It deduplicates peers by cryptographic MeshLink device ID while retaining independent transport-specific endpoints, exposes a live peer snapshot and event stream, and prunes stale endpoint records after a configurable timeout. Adapter start/scan/stop failures are isolated per transport and returned to the caller rather than aborting the whole scan.
+`UniversalDiscoveryCoordinator` coordinates start, scan and stop operations across registered `MeshTransport` adapters. It deduplicates peers by MeshLink device ID while retaining independent transport-specific endpoints, exposes a live peer snapshot and event stream, and prunes stale endpoint records after a configurable timeout. Adapter failures are isolated per transport.
 
-This coordinator is a reusable source module. It is not yet wired into the relay service or UI, and it does not add missing Google Nearby or NFC transport adapters. The existing Wi-Fi Direct, Wi-Fi Aware, BLE and LAN adapters remain subject to their documented hardware and physical-device acceptance tests. Bluetooth Classic source code is not yet included in the relay service lifecycle. Google Nearby requires its supported Play services dependency and runtime availability; it must not be represented as a server-free generic radio protocol.
+The app-scoped coordinator is now connected to `MeshRelayService`: relay startup starts only the LAN, BLE, Wi-Fi Direct and Wi-Fi Aware adapters enabled in the user's settings, performs an initial discovery pass, and relay shutdown stops registered adapters through the coordinator. The ViewModel exposes the coordinator's live endpoint snapshot to the UI layer. Explicit start/stop selection is covered by unit tests.
+
+Bluetooth Classic is registered as an adapter but is not automatically started by the relay because there is no user-facing enable setting in the current settings model. Google Nearby remains unimplemented and requires its supported Play services dependency and runtime availability; NFC remains identity/bootstrap only. The existing Wi-Fi Direct, Wi-Fi Aware, BLE and LAN adapters remain subject to their documented hardware and physical-device acceptance tests.
 
 ## Capability boundary reminder
 
