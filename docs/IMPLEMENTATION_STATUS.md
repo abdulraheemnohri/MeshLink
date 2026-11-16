@@ -110,3 +110,14 @@ NFC identity URI import is wired through the existing NDEF_DISCOVERED intent han
 ## Transport policy correctness hardening
 
 The routing dispatcher now treats `ONLY` as a strict single-path mode: even when the persisted fallback toggle is true, it attempts only the highest-ranked selected transport. `PREFER` and `AUTOMATIC` continue to honor the fallback toggle. The policy rule is centralized in `TransportPolicy.permitsFallback()` and covered by unit tests. This is a source-level fix; CI and physical-device delivery still need to pass before claiming verified behavior.
+
+
+## Universal discovery coordinator — source added
+
+`UniversalDiscoveryCoordinator` now coordinates start, scan and stop operations across an explicitly supplied list of registered `MeshTransport` adapters. It deduplicates peers by cryptographic MeshLink device ID while retaining independent transport-specific endpoints, exposes a live peer snapshot and event stream, and prunes stale endpoint records after a configurable timeout. Adapter start/scan/stop failures are isolated per transport and returned to the caller rather than aborting the whole scan.
+
+This coordinator is a reusable source module. It is not yet wired into the relay service or UI, and it does not add missing Google Nearby or NFC transport adapters. The existing Wi-Fi Direct, Wi-Fi Aware, BLE and LAN adapters remain subject to their documented hardware and physical-device acceptance tests. Bluetooth Classic source code is not yet included in the relay service lifecycle. Google Nearby requires its supported Play services dependency and runtime availability; it must not be represented as a server-free generic radio protocol.
+
+## Capability boundary reminder
+
+NFC is for short-range identity/bootstrap handoff, not continuous mesh data transport. LoRa and satellite require compatible external hardware/gateways. Android background radio behavior is OEM- and permission-dependent. Release signing requires the owner's private keystore and must never be committed to Git.
