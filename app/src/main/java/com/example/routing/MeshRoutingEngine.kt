@@ -55,6 +55,7 @@ class MeshRoutingEngine(
     private val seenPacketCache = ConcurrentHashMap<String, Long>()
     private val transports = mutableListOf<MeshTransport>()
     private val transportPolicy = com.example.transport.TransportPolicyManager(context)
+    private val pathHealth = com.example.transport.TransportPathHealthStore(context)
 
     private val _incomingVoice = MutableSharedFlow<VoiceIncomingClip>(extraBufferCapacity = 16)
     val incomingVoice: SharedFlow<VoiceIncomingClip> = _incomingVoice.asSharedFlow()
@@ -1109,6 +1110,7 @@ class MeshRoutingEngine(
         val preference = policy.preferred.withIndex().associate { it.value to it.index }
         return endpointPaths[peerId]?.values
             ?.filter { it.transportType !in policy.disabled }
+            ?.filter { pathHealth.shouldAttempt(peerId, it.transportType) }
             ?.filter { ep -> transports.any { it.transportType == ep.transportType && it.isRunning } }
             ?.filter {
                 policy.mode != com.example.transport.TransportSelectionMode.ONLY ||
@@ -1131,6 +1133,7 @@ class MeshRoutingEngine(
         val candidates = (endpointPaths[endpoint.deviceId]?.values?.toList().orEmpty() + endpoint)
             .distinctBy { it.transportType }
             .filter { it.transportType !in policy.disabled }
+            .filter { pathHealth.shouldAttempt(endpoint.deviceId, it.transportType) }
             .filter { ep -> transports.any { it.transportType == ep.transportType && it.isRunning } }
             .filter { packetSize <= it.transportType.maxPayloadBytes }
             .filter {
@@ -1146,6 +1149,7 @@ class MeshRoutingEngine(
         val preference = policy.preferred.withIndex().associate { it.value to it.index }
         val ordered = candidates.sortedWith(
             compareBy<DiscoveredEndpoint> { preference[it.transportType] ?: Int.MAX_VALUE }
+                .thenBy { pathHealth.failureCount(endpoint.deviceId, it.transportType) }
                 .thenByDescending { it.rssiDbm }
                 .thenByDescending { it.lastSeenAt }
         )
@@ -1156,10 +1160,13 @@ class MeshRoutingEngine(
             val adapter = transports.firstOrNull {
                 it.transportType == candidate.transportType && it.isRunning
             } ?: continue
-            if (runCatching { adapter.sendPacket(candidate, packet) }.getOrDefault(false)) {
+            val sent = runCatching { adapter.sendPacket(candidate, packet) }.getOrDefault(false)
+            if (sent) {
+                pathHealth.recordSuccess(candidate.deviceId, candidate.transportType)
                 activeEndpoints[candidate.deviceId] = candidate
                 return true
             }
+            pathHealth.recordFailure(candidate.deviceId, candidate.transportType)
         }
         return false
     }
