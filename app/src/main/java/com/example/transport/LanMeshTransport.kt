@@ -322,7 +322,12 @@ class LanMeshTransport(
     companion object {
         const val UDP_PORT = 45820
         const val TCP_PORT = 45821
-        private val MESH_INTERFACE_PREFIXES = listOf("wlan", "p2p", "ap", "swlan", "wifi")
+        // Wi-Fi, Wi-Fi Direct, hotspot, Ethernet and USB-tether interfaces.
+        // Keep this allow-list explicit; never bind mesh sockets to VPN/tunnel/loopback interfaces.
+        private val MESH_INTERFACE_PREFIXES = listOf(
+            "wlan", "p2p", "ap", "swlan", "wifi",
+            "eth", "en", "usb", "rndis", "br"
+        )
         private const val BEACON_INTERVAL_MS = 8_000L
         private const val CONNECT_TIMEOUT_MS = 4_000
         private const val READ_TIMEOUT_MS = 10_000
