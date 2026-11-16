@@ -151,4 +151,22 @@ class TransportPolicyManagerTest {
         )
         assertTrue(plan is DeliveryPlan.Unavailable)
     }
+    @Test
+    fun onlyModeNeverAttemptsSecondPreferredTransportEvenWhenFallbackFlagIsTrue() {
+        val policy = TransportPolicy(
+            mode = TransportSelectionMode.ONLY,
+            preferred = listOf(TransportType.LOCAL_LAN, TransportType.BLE),
+            allowFallback = true
+        )
+        assertTrue(!policy.permitsFallback())
+    }
+
+    @Test
+    fun preferModeHonorsFallbackSwitch() {
+        val enabled = TransportPolicy(mode = TransportSelectionMode.PREFER, allowFallback = true)
+        val disabled = TransportPolicy(mode = TransportSelectionMode.PREFER, allowFallback = false)
+        assertTrue(enabled.permitsFallback())
+        assertTrue(!disabled.permitsFallback())
+    }
+
 }
