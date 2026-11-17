@@ -183,9 +183,10 @@ fun IdentityScreen(
         }
     }
 
+    val identityListState = rememberLazyListState()
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
-            state = settingsListState,
+            state = identityListState,
             modifier = Modifier
                 .widthIn(max = 760.dp)
                 .fillMaxSize()
@@ -909,6 +910,7 @@ private data class RuntimePermissionGroup(
     val permissions: List<String>
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     settings: SettingsEntity,
