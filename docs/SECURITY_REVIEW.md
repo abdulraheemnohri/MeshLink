@@ -58,6 +58,16 @@ Public/legacy group QR invitations containing a shared group key remain disabled
 - Replay guards are applied to session offers and general packet IDs. Replay persistence and retention limits should be reviewed alongside database and multi-hop tests.
 - Android Keystore protects local private identity key material. This does not protect against a compromised/unlocked device or a malicious OS.
 
+## Mutable routing metadata integrity
+
+**Status: OPEN — routing metadata is bounded but not cryptographically attested per hop.**
+
+The current canonical packet signature/integrity string binds protocol version, message ID, sender, destination, packet type, creation/expiry timestamps, routing strategy and encrypted payload. It intentionally excludes mutable relay fields: hop limit, hop count, visited-peer list, spray-copy budget, priority and source-cluster metadata.
+
+The routing layer now bounds hop counters and visited-path size, rejects duplicate path entries, prevents forwarding to a previous/visited hop and drops packets whose destination is already in the path. These checks protect honest nodes from malformed metadata and common loops. They do not prove that a malicious relay preserved the path or hop budget: an intermediary can alter excluded fields without invalidating the origin signature. Treat visited-peer lists as routing hints, not authenticated provenance.
+
+A future protocol version should add authenticated per-hop route attestations or another reviewed mutable-envelope design before claiming protection against malicious relay tampering. Keep the replay cache and absolute packet expiry as independent limits.
+
 ## File-transfer safety
 
 - Offers validate size, chunk count and SHA-256 syntax before transfer creation.
@@ -73,6 +83,6 @@ Public/legacy group QR invitations containing a shared group key remain disabled
 3. Decide and test a safe confidentiality policy for emergency broadcast payloads; do not imply broadcast payloads are encrypted.
 4. Validate proactive session rekey, session expiry/reconnect, simultaneous-offer arbitration and cross-version interoperability on two physical devices.
 5. Remove legacy file receive decryption only after a compatibility window and upgrade tests.
-6. Add two-device cryptographic interoperability tests and three-device relay tests.
+6. Add authenticated per-hop route attestations in a versioned protocol, then run two-device cryptographic interoperability and three-device relay tests.
 7. Verify replay-store persistence, clock-skew behavior, packet TTL and deduplication under process restart.
 8. Complete an independent security review before production claims.
