@@ -22,6 +22,7 @@ import com.example.transport.DiscoveredEndpoint
 import com.example.transport.MeshTransport
 import com.example.transport.TransportEvent
 import com.example.transport.permitsFallback
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -1276,44 +1277,63 @@ class MeshRoutingEngine(
         if (pending.isEmpty() || activeEndpoints.isEmpty()) return
 
         for (entry in pending) {
-            val packet = MeshPacketCodec.decode(entry.rawPacketJson) ?: run {
-                repository.removePendingPacket(entry.messageId)
-                continue
-            }
-            if (packet.isExpired()) {
-                repository.removePendingPacket(entry.messageId)
-                repository.updateMessageStatus(entry.messageId, "EXPIRED", null, packet.hopCount)
-                continue
-            }
+            try {
+                val packet = MeshPacketCodec.decode(entry.rawPacketJson) ?: run {
+                    repository.removePendingPacket(entry.messageId)
+                    continue
+                }
+                if (packet.isExpired()) {
+                    repository.removePendingPacket(entry.messageId)
+                    repository.updateMessageStatus(entry.messageId, "EXPIRED", null, packet.hopCount)
+                    continue
+                }
 
-            val now = System.currentTimeMillis()
-            if (!PendingPacketRetryPolicy.shouldAttempt(
-                    attemptCount = entry.attemptCount,
-                    lastAttemptAt = entry.lastAttemptAt,
-                    now = now
-                )
-            ) continue
+                val now = System.currentTimeMillis()
+                if (!PendingPacketRetryPolicy.shouldAttempt(
+                        attemptCount = entry.attemptCount,
+                        lastAttemptAt = entry.lastAttemptAt,
+                        now = now
+                    )
+                ) continue
 
-            // Atomically claim this exact outbox revision before sending. A second
-            // relay worker with a stale snapshot cannot send the same row concurrently.
-            val claimed = repository.claimPendingPacketAttempt(
-                messageId = entry.messageId,
-                expectedAttemptCount = entry.attemptCount,
-                expectedLastAttemptAt = entry.lastAttemptAt,
-                attemptedAt = now
-            )
-            if (!claimed) continue
-            val direct = activeEndpoints[packet.destinationId]
-            val dispatched = dispatchPacket(packet)
-            if (dispatched) {
-                repository.removePendingPacket(entry.messageId)
-                repository.updateMessageStatus(entry.messageId, "RELAYED", null, packet.hopCount)
-                repository.logNetworkEvent(
-                    transportType = direct?.transportType?.name ?: "DTN",
-                    eventType = "DTN_FLUSH",
-                    peerId = direct?.deviceId ?: packet.destinationId,
-                    summary = "Forwarded queued DTN packet ${packet.messageId.take(8)} after a route became available"
+                // Atomically claim this exact outbox revision before sending. A second
+                // relay worker with a stale snapshot cannot send the same row concurrently.
+                val claimed = repository.claimPendingPacketAttempt(
+                    messageId = entry.messageId,
+                    expectedAttemptCount = entry.attemptCount,
+                    expectedLastAttemptAt = entry.lastAttemptAt,
+                    attemptedAt = now
                 )
+                if (!claimed) continue
+                val direct = activeEndpoints[packet.destinationId]
+                val dispatched = dispatchPacket(packet)
+                if (dispatched) {
+                    repository.removePendingPacket(entry.messageId)
+                    repository.updateMessageStatus(entry.messageId, "RELAYED", null, packet.hopCount)
+                    repository.logNetworkEvent(
+                        transportType = direct?.transportType?.name ?: "DTN",
+                        eventType = "DTN_FLUSH",
+                        peerId = direct?.deviceId ?: packet.destinationId,
+                        summary = "Forwarded queued DTN packet ${packet.messageId.take(8)} after a route became available"
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                // A single malformed row, database hiccup or transport exception must not
+                // prevent later queued packets from being attempted in this flush pass.
+                // The claimed attempt remains persisted, so retry backoff still applies.
+                try {
+                    repository.logNetworkEvent(
+                        transportType = "DTN",
+                        eventType = "DTN_FLUSH_ERROR",
+                        summary = "Deferred queued packet ${entry.messageId.take(8)} after ${error.javaClass.simpleName}"
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Diagnostics are best-effort; keep processing the remaining outbox.
+                }
             }
         }
         } finally {
