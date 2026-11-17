@@ -73,6 +73,22 @@ class TransportPolicyManagerTest {
     }
 
     @Test
+    fun nearbyConnectionsIsEligibleWhenEnabledAndDiscovered() {
+        val policy = TransportPolicy(
+            mode = TransportSelectionMode.ONLY,
+            preferred = listOf(TransportType.NEARBY_CONNECTIONS)
+        )
+        val plan = manager.plan(
+            "node_a",
+            "node_b",
+            listOf(AvailableTransport(TransportType.NEARBY_CONNECTIONS, true, true, 16 * 1024)),
+            policy
+        ) as DeliveryPlan.Network
+        assertEquals(TransportType.NEARBY_CONNECTIONS, plan.primary)
+        assertTrue(plan.fallback.isEmpty())
+    }
+
+    @Test
     fun strictOnlyModeNeverReturnsFallback() {
         val policy = TransportPolicy(
             mode = TransportSelectionMode.ONLY,
