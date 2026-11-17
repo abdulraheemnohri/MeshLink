@@ -48,6 +48,9 @@ See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for the maintained packet encryptio
 - Each relay consumes one hop, increments `hopCount`, and appends its own device ID.
 - Relays forward the encrypted/signed packet envelope without reading application plaintext.
 - Respect payload limits and the selected transport policy; endpoint locators are adapter-specific.
+- Route metadata is bounded: hop counters and visited-path length are limited to 32, duplicate visited IDs are rejected, and `hopLimit + hopCount` cannot exceed 32.
+
+**Security limitation:** the current canonical origin signature does not cover mutable relay fields (`hopLimit`, `hopCount`, `visitedPeers`, `sprayCopies`, `priority`, `sourceCluster`). Relays can update them, but this also means a malicious relay can tamper with them without invalidating the origin signature. Visited paths are best-effort routing hints, not authenticated provenance. See [SECURITY_REVIEW.md](SECURITY_REVIEW.md); authenticated per-hop route attestations remain an open protocol-version upgrade.
 
 ## Transport independence
 
