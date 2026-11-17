@@ -24,6 +24,7 @@ import com.example.ui.screens.LockScreen
 import com.example.ui.screens.NetworkBridgeScreen
 import com.example.ui.screens.NetworkMapScreen
 import com.example.ui.screens.PrivateChatScreen
+import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.RoutingScreen
 import com.example.ui.screens.SecurityScreen
 import com.example.ui.screens.SettingsScreen
@@ -53,6 +54,7 @@ fun NavigationGraph(
     val networkEvents by viewModel.networkEvents.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val userSettings by viewModel.userSettings.collectAsStateWithLifecycle()
+    val profile by viewModel.profile.collectAsStateWithLifecycle()
     val transportPolicy by viewModel.transportPolicy.collectAsStateWithLifecycle()
     val isRelayRunning by viewModel.isRelayRunning.collectAsStateWithLifecycle()
     val capabilities by viewModel.capabilities.collectAsStateWithLifecycle()
@@ -319,6 +321,14 @@ fun NavigationGraph(
                 onRefreshCapabilities = { viewModel.refreshCapabilities() },
                 onRunLoopbackTest = { viewModel.runLoopbackSelfTest() },
                 onClearLogs = { viewModel.clearNetworkLogs() }
+            )
+        }
+
+        composable(MeshRoute.PROFILE) {
+            ProfileScreen(
+                profile = profile,
+                onProfileChange = { viewModel.saveProfile(it) },
+                onSave = { viewModel.saveProfile(profile) }
             )
         }
 
