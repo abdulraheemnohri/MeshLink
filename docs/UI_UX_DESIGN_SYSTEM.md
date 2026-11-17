@@ -73,3 +73,12 @@ Review every route on a compact phone and a wide screen, with both light and dar
 - Transport cards show reported runtime state, discovery timestamps and adapter errors. They do not invent signal strength for transports that do not expose it.
 - Connection RSSI and latency are displayed from persisted connection measurements only.
 - Settings search and category filters already exist and remain available. Physical radio acceptance and actual signal reporting remain dependent on adapter and device support.
+
+
+## Connection profile detail pass (2026-11-17)
+
+- People & Trusted Peers cards now expand into a local connection profile.
+- Profile details include device ID, identity fingerprint, QR verification state, block state, active transport, last reported signal, last endpoint, relay success/drop counters, reputation, session ratchet counter and last-seen timestamp.
+- Recent connection path records include transport, connection state, RSSI, latency, bytes sent and bytes received.
+- The profile does not expose private keys or export identity material. Signal values are shown as not reported when the stored value indicates no measurement.
+- Expanded profile controls include stable test tags.
