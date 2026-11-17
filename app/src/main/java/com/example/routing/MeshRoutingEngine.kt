@@ -296,7 +296,11 @@ class MeshRoutingEngine(
             )
         )
 
-        return dispatchPacket(packet)
+        val dispatched = dispatchPacket(packet)
+        if (!dispatched && effectiveStrategy == RoutingStrategy.DIRECT) {
+            repository.updateMessageStatus(packet.messageId, "FAILED", null, packet.hopCount)
+        }
+        return dispatched
     }
 
     suspend fun updateGroupMemberRoleAndDistribute(
@@ -1171,8 +1175,8 @@ class MeshRoutingEngine(
             }
         }
 
-        // Direct mode is intentionally one-hop only: never fall back to relays or an offline queue.
-        if (!RoutingStrategyPolicy.allowsOfflineQueue(packet.routingStrategy)) return false
+        // Direct mode is intentionally one-hop only: never fall back to a route, relay or offline queue.
+        if (!RoutingStrategyPolicy.allowsRelay(packet.routingStrategy)) return false
 
         // Group broadcasts use their member set rather than a route to the group ID.
         if (packet.packetType != PacketType.GROUP_MESSAGE) {
