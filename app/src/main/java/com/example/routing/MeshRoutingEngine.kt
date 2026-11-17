@@ -246,12 +246,12 @@ class MeshRoutingEngine(
         val requestedStrategy = strategyOverride ?: runCatching {
             RoutingStrategy.valueOf(settings.defaultRoutingStrategy)
         }.getOrDefault(RoutingStrategy.AUTONOMOUS)
-        val reachableGroupMemberCount = repository.getGroupMembersOnce(groupId)
-            .count { member ->
-                member.peerId != local.deviceId &&
-                    member.peerId in activeEndpoints &&
-                    repository.getPeerById(member.peerId)?.let { it.verifiedByQr && !it.blocked } == true
-            }
+        var reachableGroupMemberCount = 0
+        for (member in repository.getGroupMembersOnce(groupId)) {
+            if (member.peerId == local.deviceId || member.peerId !in activeEndpoints) continue
+            val peer = repository.getPeerById(member.peerId) ?: continue
+            if (peer.verifiedByQr && !peer.blocked) reachableGroupMemberCount++
+        }
         val effectiveStrategy = resolveEffectiveStrategy(
             requested = requestedStrategy,
             hasDirectEndpoint = reachableGroupMemberCount > 0
@@ -1122,14 +1122,14 @@ class MeshRoutingEngine(
 
         // Group packets are addressed to a group ID, not a peer endpoint. Resolve only
         // currently reachable, non-blocked group members for the selected delivery mode.
-        val groupMemberIds = if (packet.packetType == PacketType.GROUP_MESSAGE) {
-            repository.getGroupMembersOnce(packet.destinationId)
-                .asSequence()
-                .filter { it.peerId != localIdentity.deviceId }
-                .filter { member -> repository.getPeerById(member.peerId)?.let { it.verifiedByQr && !it.blocked } == true }
-                .map { it.peerId }
-                .toSet()
-        } else emptySet()
+        val groupMemberIds = mutableSetOf<String>()
+        if (packet.packetType == PacketType.GROUP_MESSAGE) {
+            for (member in repository.getGroupMembersOnce(packet.destinationId)) {
+                if (member.peerId == localIdentity.deviceId) continue
+                val peer = repository.getPeerById(member.peerId) ?: continue
+                if (peer.verifiedByQr && !peer.blocked) groupMemberIds += member.peerId
+            }
+        }
 
         if (packet.packetType == PacketType.GROUP_MESSAGE &&
             packet.routingStrategy == RoutingStrategy.DIRECT
@@ -1170,6 +1170,9 @@ class MeshRoutingEngine(
                 return true
             }
         }
+
+        // Direct mode is intentionally one-hop only: never fall back to relays or an offline queue.
+        if (packet.routingStrategy == RoutingStrategy.DIRECT) return false
 
         // Group broadcasts use their member set rather than a route to the group ID.
         if (packet.packetType != PacketType.GROUP_MESSAGE) {
@@ -1563,8 +1566,9 @@ class MeshRoutingEngine(
         // Network Bridge cross-cluster forwarding
         bridgePacketIfConfigured(packet, transportType, senderPeer?.verifiedByQr == true)
 
-        // Multi-hop relay forwarding without reading plaintext payload.
-        val forwarded = MeshForwardingPolicy.forwardForRelay(packet, local.deviceId)
+        // Direct mode is strictly one-hop. Other modes may participate in multi-hop relay.
+        val forwarded = if (packet.routingStrategy == RoutingStrategy.DIRECT) null
+            else MeshForwardingPolicy.forwardForRelay(packet, local.deviceId)
         if (forwarded != null) {
             val sentOrQueued = dispatchPacket(forwarded)
             if (sentOrQueued) {
