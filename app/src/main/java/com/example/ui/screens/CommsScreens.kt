@@ -334,7 +334,6 @@ private fun TransferMetric(
 ) {
     Column(
         modifier = modifier
-            .clip(CircleShape.copy(all = false))
             .background(color.copy(alpha = 0.09f))
             .padding(horizontal = 10.dp, vertical = 9.dp)
     ) {
@@ -450,9 +449,9 @@ private fun TransferCard(
 
 private fun formatTransferBytes(bytes: Long): String {
     if (bytes < 1024L) return "$bytes B"
-    if (bytes < 1024L * 1024L) return "${bytes / 1024.0.let { "%.1f".format(java.util.Locale.ROOT, it) }} KB"
-    if (bytes < 1024L * 1024L * 1024L) return "${bytes / (1024.0 * 1024.0).let { "%.1f".format(java.util.Locale.ROOT, it) }} MB"
-    return "${bytes / (1024.0 * 1024.0 * 1024.0).let { "%.2f".format(java.util.Locale.ROOT, it) }} GB"
+    if (bytes < 1024L * 1024L) return "${String.format(java.util.Locale.ROOT, "%.1f", bytes / 1024.0)} KB"
+    if (bytes < 1024L * 1024L * 1024L) return "${String.format(java.util.Locale.ROOT, "%.1f", bytes / (1024.0 * 1024.0))} MB"
+    return "${String.format(java.util.Locale.ROOT, "%.2f", bytes / (1024.0 * 1024.0 * 1024.0))} GB"
 }
 
 @Composable
