@@ -23,6 +23,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 
+class PeerIdentityKeyChangedException(
+    val peerId: String,
+    val previousFingerprint: String,
+    val receivedFingerprint: String
+) : SecurityException("Peer identity key changed")
+
 class MeshRepository(
     private val db: AppDatabase,
     private val crypto: MeshCryptoEngine
@@ -176,13 +182,28 @@ class MeshRepository(
 
     suspend fun importVerifiedPeer(payload: PeerIdentityPayload): PeerEntity {
         val existing = peerDao.getPeerById(payload.deviceId)
+        if (existing != null &&
+            (existing.fingerprint != payload.fingerprint ||
+                existing.signingPublicKey != payload.signingPublicKeyB64 ||
+                existing.agreementPublicKey != payload.agreementPublicKeyB64)
+        ) {
+            logSecurityEvent(
+                eventType = "PEER_IDENTITY_KEY_CHANGED",
+                peerId = payload.deviceId,
+                severity = "CRITICAL",
+                summary = "Rejected QR identity update because stored and received fingerprints differ"
+            )
+            throw PeerIdentityKeyChangedException(
+                payload.deviceId, existing.fingerprint, payload.fingerprint
+            )
+        }
         val entity = PeerEntity(
             deviceId = payload.deviceId,
             alias = payload.alias,
             signingPublicKey = payload.signingPublicKeyB64,
             agreementPublicKey = payload.agreementPublicKeyB64,
             fingerprint = payload.fingerprint,
-            verifiedByQr = true,
+            verifiedByQr = existing?.verifiedByQr ?: false,
             blocked = false,
             isConnected = existing?.isConnected ?: false,
             activeTransport = existing?.activeTransport ?: "QR",
@@ -200,9 +221,9 @@ class MeshRepository(
         )
         peerDao.upsert(entity)
         logSecurityEvent(
-            eventType = "QR_VERIFY",
+            eventType = "QR_IDENTITY_IMPORTED",
             peerId = payload.deviceId,
-            summary = "Verified out-of-band identity for ${payload.alias} (${payload.fingerprint.take(14)}...)"
+            summary = "Imported identity QR; compare its fingerprint out-of-band before marking trusted"
         )
         return entity
     }
