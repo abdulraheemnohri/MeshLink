@@ -710,7 +710,7 @@ fun GroupChatScreen(
 
     if (showMembersDialog) {
         val memberIds = members.map { it.peerId }.toSet()
-        val inviteCandidates = allPeers.filter { !it.blocked && !memberIds.contains(it.deviceId) }
+        val inviteCandidates = allPeers.filter { it.verifiedByQr && !it.blocked && !memberIds.contains(it.deviceId) }
         AlertDialog(
             onDismissRequest = { showMembersDialog = false },
             title = { Text("Members (${members.size})") },
