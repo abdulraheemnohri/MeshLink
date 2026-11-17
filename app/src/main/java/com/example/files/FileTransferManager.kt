@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -41,10 +42,9 @@ class FileTransferManager(
     init {
         scope.launch {
             routingEngine.sessionEstablished.collect { peerId ->
-                repository.transfersFlow.collect { transfers ->
-                    transfers.filter { it.isOutgoing && it.peerId == peerId && it.status == "PAUSED" }
-                        .forEach { transfer -> resumeTransfer(transfer.transferId) }
-                }
+                val transfers = repository.transfersFlow.first()
+                transfers.filter { it.isOutgoing && it.peerId == peerId && it.status == "PAUSED" }
+                    .forEach { transfer -> resumeTransfer(transfer.transferId) }
             }
         }
         scope.launch {
