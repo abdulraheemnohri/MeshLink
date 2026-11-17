@@ -243,7 +243,7 @@ fun QrCodePreview(
     }
 }
 
-private fun generateQrBitmap(content: String, pixels: Int): Bitmap? {
+fun generateQrBitmap(content: String, pixels: Int = 1024): Bitmap? {
     if (content.isBlank()) return null
     return runCatching {
         val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, pixels, pixels)
