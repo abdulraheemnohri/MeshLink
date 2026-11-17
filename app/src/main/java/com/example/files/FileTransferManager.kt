@@ -40,6 +40,14 @@ class FileTransferManager(
 
     init {
         scope.launch {
+            routingEngine.sessionEstablished.collect { peerId ->
+                repository.transfersFlow.collect { transfers ->
+                    transfers.filter { it.isOutgoing && it.peerId == peerId && it.status == "PAUSED" }
+                        .forEach { transfer -> resumeTransfer(transfer.transferId) }
+                }
+            }
+        }
+        scope.launch {
             routingEngine.incomingFilePacket.collect { incoming ->
                 try {
                     handleIncomingFilePacket(incoming.packet.senderId, incoming.payloadJson)
@@ -216,8 +224,11 @@ class FileTransferManager(
                 senderId = local.deviceId,
                 destinationId = transfer.peerId,
                 packetType = PacketType.FILE_OFFER,
-                routingStrategy = RoutingStrategy.STORE_AND_FORWARD,
-                encryptedPayload = crypto.encryptForPeer(offerJson, peer.agreementPublicKey, peer.ratchetCounter),
+                routingStrategy = RoutingStrategy.DIRECT,
+                encryptedPayload = routingEngine.encryptForPeerSession(transfer.peerId, offerJson) ?: run {
+                    repository.upsertFileTransfer(transfer.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
+                    return
+                },
                 visitedPeers = listOf(local.deviceId)
             )
         )
@@ -268,8 +279,17 @@ class FileTransferManager(
                         senderId = local.deviceId,
                         destinationId = transfer.peerId,
                         packetType = PacketType.FILE_CHUNK,
-                        routingStrategy = RoutingStrategy.STORE_AND_FORWARD,
-                        encryptedPayload = crypto.encryptForPeer(chunkJson, peer.agreementPublicKey, peer.ratchetCounter),
+                        routingStrategy = RoutingStrategy.DIRECT,
+                        encryptedPayload = routingEngine.encryptForPeerSession(transfer.peerId, chunkJson) ?: run {
+                            repository.upsertFileTransfer(
+                                transfer.copy(
+                                    completedChunks = transfer.totalChunks - repository.getIncompleteChunks(transfer.transferId).size,
+                                    status = "PAUSED",
+                                    updatedAt = System.currentTimeMillis()
+                                )
+                            )
+                            return
+                        },
                         visitedPeers = listOf(local.deviceId)
                     )
                 )
