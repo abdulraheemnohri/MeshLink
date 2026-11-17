@@ -840,6 +840,7 @@ private fun MessageBubble(
     msg: MessageEntity,
     onReact: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val timeStr = remember(msg.createdAt) {
         SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.createdAt))
     }
