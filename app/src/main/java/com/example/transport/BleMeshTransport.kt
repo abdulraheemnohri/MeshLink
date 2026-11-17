@@ -286,7 +286,7 @@ class BleMeshTransport(
             }
         })
 
-        try {
+        return try {
             withTimeoutOrNull(180_000L) { resultDeferred.await() } ?: false
         } catch (cancelled: CancellationException) {
             throw cancelled
