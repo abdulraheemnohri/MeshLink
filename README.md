@@ -83,6 +83,7 @@ A GitHub Actions workflow is provided at `.github/workflows/android-ci.yml`. It 
 - [Architecture and implementation status](docs/IMPLEMENTATION_STATUS.md)
 - [Automated and physical-device test plan](docs/TEST_PLAN.md)
 - [Android APK installation and signing troubleshooting](docs/ANDROID_INSTALLATION.md)
+- [Full project audit and remaining release gates](docs/PROJECT_AUDIT.md)
 - [Security policy](SECURITY.md), when present in this repository
 
 ## Contributing
