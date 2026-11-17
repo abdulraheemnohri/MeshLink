@@ -409,7 +409,13 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleGroupMemberRole(groupId: String, member: GroupMemberEntity) {
         viewModelScope.launch {
             val nextRole = if (member.role == "ADMIN") "MEMBER" else "ADMIN"
-            repository.updateGroupMemberRole(groupId, member.peerId, nextRole)
+            runCatching { routingEngine.updateGroupMemberRoleAndDistribute(groupId, member.peerId, nextRole) }
+                .onSuccess { (sent, total) ->
+                    _snackMessages.tryEmit("Role update distributed to " + sent + " of " + total + " members; offline members receive it after reconnecting.")
+                }
+                .onFailure { error ->
+                    _snackMessages.tryEmit("Could not update group role: " + (error.message ?: "operation failed"))
+                }
         }
     }
 
