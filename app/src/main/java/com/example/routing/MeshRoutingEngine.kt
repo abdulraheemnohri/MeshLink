@@ -13,6 +13,7 @@ import com.example.core.protocol.RoutingStrategy
 import com.example.core.protocol.TransportType
 import com.example.data.entities.EmergencyBroadcastEntity
 import com.example.data.entities.MessageEntity
+import com.example.data.entities.GroupRoleUpdateEntity
 import com.example.data.entities.PendingPacketEntity
 import com.example.data.entities.RouteEntity
 import com.example.data.repository.MeshRepository
@@ -266,19 +267,24 @@ class MeshRoutingEngine(
         return dispatchPacket(packet)
     }
 
-    suspend fun updateGroupMemberRoleAndDistribute(groupId: String, targetPeerId: String, role: String): Pair<Int, Int> {
+    suspend fun updateGroupMemberRoleAndDistribute(
+        groupId: String,
+        targetPeerId: String,
+        role: String
+    ): Pair<Int, Int> {
         require(role == "ADMIN" || role == "MEMBER") { "Invalid group role" }
         val local = repository.ensureInitialized()
         val group = repository.getGroupById(groupId) ?: throw IllegalArgumentException("Group not found")
         require(repository.isGroupAdmin(groupId, local.deviceId)) { "Only a group admin can update roles" }
         val members = repository.getGroupMembersOnce(groupId)
-        val target = members.firstOrNull { it.peerId == targetPeerId } ?: throw IllegalArgumentException("Group member not found")
+        val target = members.firstOrNull { it.peerId == targetPeerId }
+            ?: throw IllegalArgumentException("Group member not found")
         if (target.role == "ADMIN" && role == "MEMBER") {
             require(members.count { it.role == "ADMIN" } > 1) { "Cannot demote the last group admin" }
         }
         require(targetPeerId != local.deviceId || role == "ADMIN") { "The current admin cannot demote itself" }
         val issuedAt = System.currentTimeMillis()
-        repository.updateGroupMemberRole(groupId, targetPeerId, role)
+        repository.updateGroupMemberRole(groupId, targetPeerId, role, issuedAt)
         val payload = JSONObject().apply {
             put("groupId", groupId)
             put("targetPeerId", targetPeerId)
@@ -288,10 +294,24 @@ class MeshRoutingEngine(
             put("issuer", local.deviceId)
         }.toString()
         val recipients = members.filter { it.peerId != local.deviceId }
-        var sent = 0
+        var queuedOrSent = 0
         recipients.forEach { member ->
-            val peer = repository.getPeerById(member.peerId) ?: return@forEach
-            if (!peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) return@forEach
+            val peer = repository.getPeerById(member.peerId)
+            if (peer == null || !peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) {
+                repository.recordGroupRoleUpdate(
+                    GroupRoleUpdateEntity(
+                        packetId = java.util.UUID.randomUUID().toString(),
+                        groupId = groupId,
+                        epoch = group.keyEpoch,
+                        peerId = member.peerId,
+                        targetPeerId = targetPeerId,
+                        role = role,
+                        issuedAt = issuedAt,
+                        status = "FAILED"
+                    )
+                )
+                return@forEach
+            }
             val packet = crypto.signPacket(
                 MeshPacket(
                     senderId = local.deviceId,
@@ -303,15 +323,114 @@ class MeshRoutingEngine(
                     priority = MeshPacket.PRIORITY_HIGH
                 )
             )
-            if (dispatchPacket(packet) || repository.getPendingPacketById(packet.messageId) != null) sent++
+            val record = GroupRoleUpdateEntity(
+                packetId = packet.messageId,
+                groupId = groupId,
+                epoch = group.keyEpoch,
+                peerId = member.peerId,
+                targetPeerId = targetPeerId,
+                role = role,
+                issuedAt = issuedAt,
+                status = "PENDING"
+            )
+            repository.recordGroupRoleUpdate(record)
+            val deliveredNow = dispatchPacket(packet)
+            val queued = repository.getPendingPacketById(packet.messageId) != null
+            repository.recordGroupRoleUpdate(
+                record.copy(
+                    status = when {
+                        deliveredNow -> "SENT"
+                        queued -> "QUEUED"
+                        else -> "FAILED"
+                    },
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+            if (deliveredNow || queued) queuedOrSent++
         }
         repository.logSecurityEvent(
             eventType = "GROUP_ROLE_UPDATE_DISTRIBUTION",
             peerId = targetPeerId,
-            severity = if (sent == recipients.size) "INFO" else "WARN",
-            summary = "Distributed signed role update to " + sent + " of " + recipients.size + " group members"
+            severity = if (queuedOrSent == recipients.size) "INFO" else "WARN",
+            summary = "Persisted role update for $queuedOrSent of ${recipients.size} group member(s); delivery acknowledgements are tracked per recipient"
         )
-        return sent to recipients.size
+        return queuedOrSent to recipients.size
+    }
+
+    suspend fun retryPendingGroupRoleUpdatesForPeer(peerId: String): Pair<Int, Int> {
+        val local = repository.ensureInitialized()
+        val peer = repository.getPeerById(peerId)
+        if (peer == null || !peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) {
+            return 0 to 1
+        }
+        val unresolved = repository.getUnresolvedGroupRoleUpdatesForPeer(peerId)
+        var retried = 0
+        var waiting = 0
+        unresolved.forEach { oldRecord ->
+            val group = repository.getGroupById(oldRecord.groupId)
+            if (group == null || group.keyEpoch != oldRecord.epoch ||
+                !repository.isGroupAdmin(oldRecord.groupId, local.deviceId)
+            ) {
+                repository.markGroupRoleUpdateSuperseded(oldRecord.packetId)
+                return@forEach
+            }
+            val target = repository.getGroupMembersOnce(oldRecord.groupId)
+                .firstOrNull { it.peerId == oldRecord.targetPeerId }
+            if (target == null || target.roleUpdatedAt > oldRecord.issuedAt ||
+                (target.roleUpdatedAt == oldRecord.issuedAt && target.role != oldRecord.role)
+            ) {
+                repository.markGroupRoleUpdateSuperseded(oldRecord.packetId)
+                return@forEach
+            }
+            val existingPending = repository.getPendingPacketById(oldRecord.packetId)
+            if (existingPending != null && existingPending.expiresAt > System.currentTimeMillis()) {
+                waiting++
+                return@forEach
+            }
+            if (existingPending != null) repository.removePendingPacket(oldRecord.packetId)
+
+            val payload = JSONObject().apply {
+                put("groupId", oldRecord.groupId)
+                put("targetPeerId", oldRecord.targetPeerId)
+                put("role", oldRecord.role)
+                put("epoch", oldRecord.epoch)
+                put("issuedAt", oldRecord.issuedAt)
+                put("issuer", local.deviceId)
+            }.toString()
+            val packet = crypto.signPacket(
+                MeshPacket(
+                    senderId = local.deviceId,
+                    destinationId = peerId,
+                    packetType = PacketType.GROUP_MEMBER_ROLE_UPDATE,
+                    routingStrategy = RoutingStrategy.STORE_AND_FORWARD,
+                    encryptedPayload = crypto.encryptForPeer(payload, peer.agreementPublicKey, peer.ratchetCounter),
+                    visitedPeers = listOf(local.deviceId),
+                    priority = MeshPacket.PRIORITY_HIGH
+                )
+            )
+            val retryRecord = oldRecord.copy(
+                packetId = packet.messageId,
+                status = "PENDING",
+                updatedAt = System.currentTimeMillis(),
+                acknowledgedAt = null
+            )
+            repository.recordGroupRoleUpdate(retryRecord)
+            repository.markGroupRoleUpdateSuperseded(oldRecord.packetId)
+            val deliveredNow = dispatchPacket(packet)
+            val queued = repository.getPendingPacketById(packet.messageId) != null
+            repository.recordGroupRoleUpdate(
+                retryRecord.copy(
+                    status = when {
+                        deliveredNow -> "SENT"
+                        queued -> "QUEUED"
+                        else -> "FAILED"
+                    },
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+            if (deliveredNow || queued) retried++ else waiting++
+        }
+        return retried to waiting
     }
 
     suspend fun rotateGroupKeyAndDistribute(groupId: String): Pair<Int, Int> {
