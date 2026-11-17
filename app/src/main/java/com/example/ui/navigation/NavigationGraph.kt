@@ -229,6 +229,7 @@ fun NavigationGraph(
                 onRemoveMember = { peerId -> viewModel.removeGroupMember(groupId, peerId) },
                 onToggleRole = { member -> viewModel.toggleGroupMemberRole(groupId, member) },
                 onRotateKey = { viewModel.rotateGroupKey(groupId) },
+                onRetryKeyUpdates = { viewModel.retryGroupKeyUpdates(groupId) },
                 onReact = { msg, emoji -> viewModel.toggleReaction(msg, emoji) }
             )
         }
