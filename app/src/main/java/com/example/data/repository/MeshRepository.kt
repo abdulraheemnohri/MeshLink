@@ -574,6 +574,9 @@ class MeshRepository(
     suspend fun getActivePendingPackets(): List<PendingPacketEntity> =
         pendingPacketDao.getActivePendingOnce(System.currentTimeMillis())
 
+    suspend fun getPendingPacketById(messageId: String): PendingPacketEntity? =
+        pendingPacketDao.getById(messageId)
+
     suspend fun removePendingPacket(messageId: String) {
         pendingPacketDao.deleteById(messageId)
     }
