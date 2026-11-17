@@ -163,7 +163,22 @@ class MeshRoutingEngine(
             )
         )
 
-        return dispatchPacket(packet)
+        // Ephemeral keys are process-local and expire. Never place an MLSE1 packet in the
+        // persistent DTN queue: a later process restart could leave the recipient unable to decrypt it.
+        val directEndpoint = activeEndpoints[peerId]
+        if (directEndpoint == null) {
+            repository.updateMessageStatus(packet.messageId, "FAILED", null, packet.hopCount)
+            repository.logSecurityEvent(
+                eventType = "EPHEMERAL_SESSION_OFFLINE_SEND_BLOCKED",
+                peerId = peerId,
+                severity = "WARN",
+                summary = "Blocked offline queueing because this ephemeral session is not persistent"
+            )
+            return false
+        }
+        val sent = sendOverBestTransport(directEndpoint, packet)
+        if (!sent) repository.updateMessageStatus(packet.messageId, "FAILED", null, packet.hopCount)
+        return sent
     }
 
     suspend fun sendGroupMessage(
