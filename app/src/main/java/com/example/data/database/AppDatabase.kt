@@ -25,6 +25,7 @@ import com.example.data.entities.FileChunkEntity
 import com.example.data.entities.FileTransferEntity
 import com.example.data.entities.GroupEntity
 import com.example.data.entities.GroupMemberEntity
+import com.example.data.entities.GroupKeyUpdateEntity
 import com.example.data.entities.MessageEntity
 import com.example.data.entities.NetworkEventEntity
 import com.example.data.entities.PeerEntity
@@ -42,6 +43,7 @@ import com.example.data.entities.UserSettings
         MessageEntity::class,
         GroupEntity::class,
         GroupMemberEntity::class,
+        GroupKeyUpdateEntity::class,
         EmergencyBroadcastEntity::class,
         RouteEntity::class,
         PendingPacketEntity::class,
@@ -52,7 +54,7 @@ import com.example.data.entities.UserSettings
         SettingsEntity::class,
         UserSettings::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -78,6 +80,24 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `group_key_updates` (
+                        `packetId` TEXT NOT NULL,
+                        `groupId` TEXT NOT NULL,
+                        `epoch` INTEGER NOT NULL,
+                        `peerId` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        `acknowledgedAt` INTEGER,
+                        PRIMARY KEY(`packetId`)
+                    )""".trimIndent()
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_group_key_updates_groupId ON group_key_updates(groupId)")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -87,7 +107,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "meshlink_local.db"
-                ).addMigrations(MIGRATION_3_4)
+                ).addMigrations(MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration(dropAllTables = true).build().also {
                     INSTANCE = it
                 }
