@@ -280,3 +280,15 @@ The app's release keystore must remain private and outside Git. A signed release
 - APK installation is subject to Android package signature checks. An update must use the same application ID and signing key as the installed build; this feature cannot make a differently signed APK install over an existing app.
 - The update checker requires internet access. MeshLink's messaging and local mesh features remain independent of the release-check service.
 - Remaining release validation: run Android CI; verify a real tagged GitHub release with APK asset, no-APK release, offline/timeout/error paths, download completion/failure, Android 8+ install permission flow, same-signature upgrade and signature mismatch rejection. No APK has been installed or verified from this source change.
+
+
+## Identity QR export/import and group-management UX (2026-11-17)
+
+- Identity screen can render a high-resolution QR PNG, save it to the public Pictures/MeshLink collection through MediaStore, and share the PNG through Android's chooser with URI read permission.
+- Identity screen can open the Android document picker, decode a QR from an image, and pass only a `meshlink://peer?` identity payload into the existing peer identity verification/import flow. Non-MeshLink QR codes are rejected at the UI boundary; the existing cryptographic signature/key validation remains authoritative.
+- No broad storage permission is requested; image import uses the Storage Access Framework and image export uses MediaStore.
+- Group list now supports name/description/invite-code search and category filters (Community, Event, Neighborhood, Rescue), with a no-results state.
+- Group creation only offers QR-verified, unblocked peers as invitation targets.
+- Group member controls now reflect the local member's ADMIN role. Admins can distribute role changes, invite trusted peers over authenticated peer connections, rotate keys, retry pending key updates, and remove members with a confirmation that explains key rotation. Non-admin controls are disabled in the UI; routing/repository authorization remains the enforcement boundary.
+- Legacy group QR invitations and pasted legacy group invite URIs remain disabled because they embed the shared group encryption key. Do not re-enable them. A future QR invitation must be recipient-specific and encrypted to that recipient's verified public key, with replay protection and expiry.
+- Remaining validation: Android CI; save/share PNG on Android 10+; import QR from Gallery/Files and malformed/non-MeshLink image tests; test a high-resolution photo; two-device group role change, member removal, key rotation, ACK/retry, and offline member recovery. Physical device validation has not been performed by this code change.
