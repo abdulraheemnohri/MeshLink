@@ -38,10 +38,14 @@ class FileTransferManager(
     private val pausedTransfers = ConcurrentHashMap<String, Boolean>()
     private val pendingAcks = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     private val activeTransfers = ConcurrentHashMap.newKeySet<String>()
+    private val startupRecovery = CompletableDeferred<Unit>()
 
     init {
-        scope.launch { recoverInterruptedTransfers() }
         scope.launch {
+            try { recoverInterruptedTransfers() } finally { startupRecovery.complete(Unit) }
+        }
+        scope.launch {
+            startupRecovery.await()
             routingEngine.sessionEstablished.collect { peerId ->
                 val transfers = repository.transfersFlow.first()
                 transfers.filter { it.isOutgoing && it.peerId == peerId && it.status == "PAUSED" }
@@ -49,6 +53,7 @@ class FileTransferManager(
             }
         }
         scope.launch {
+            startupRecovery.await()
             routingEngine.incomingFilePacket.collect { incoming ->
                 try {
                     handleIncomingFilePacket(incoming.packet.senderId, incoming.payloadJson)
