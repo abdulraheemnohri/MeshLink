@@ -191,7 +191,7 @@ fun FileSharingScreen(
             }
 
             items(transfers.take(10), key = { it.transferId }) { xfer ->
-                TransferCard(xfer = xfer, onPause = {}, onResume = {}, showControls = false)
+                TransferCard(xfer = xfer, onPause = {}, onResume = {}, onExport = {}, showControls = false)
             }
         }
     }
