@@ -124,11 +124,12 @@ class MeshCryptoEngine(private val context: Context) {
         val keyFactory = KeyFactory.getInstance("EC")
         val signing = keyFactory.generatePublic(
             X509EncodedKeySpec(Base64.decode(signPubB64, Base64.NO_WRAP))
-        ) as? java.security.interfaces.ECPublicKey ?: return false
+        ) as? java.security.interfaces.ECPublicKey
         val agreement = keyFactory.generatePublic(
             X509EncodedKeySpec(Base64.decode(kxPubB64, Base64.NO_WRAP))
-        ) as? java.security.interfaces.ECPublicKey ?: return false
-        signing.params.curve.field.fieldSize == 256 &&
+        ) as? java.security.interfaces.ECPublicKey
+        signing != null && agreement != null &&
+            signing.params.curve.field.fieldSize == 256 &&
             agreement.params.curve.field.fieldSize == 256
     }.getOrDefault(false)
 
