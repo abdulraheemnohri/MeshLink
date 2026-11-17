@@ -681,6 +681,7 @@ class MeshRepository(
     }
 
     suspend fun markGroupRoleUpdateSuperseded(packetId: String) {
+        removePendingPacket(packetId)
         groupDao.updateRoleUpdateStatus(packetId, "SUPERSEDED", System.currentTimeMillis(), null)
     }
 
