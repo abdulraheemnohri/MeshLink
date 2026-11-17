@@ -48,7 +48,7 @@ class AppContainer(context: Context) {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val discoveryCoordinator = UniversalDiscoveryCoordinator(
-        listOf(lanTransport, wifiDirectTransport, wifiAwareTransport, bleTransport, bluetoothClassicTransport),
+        listOf(lanTransport, wifiDirectTransport, wifiAwareTransport, bleTransport, bluetoothClassicTransport, nearbyConnectionsTransport),
         appScope
     )
 
