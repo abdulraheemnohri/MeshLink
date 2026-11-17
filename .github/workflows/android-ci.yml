@@ -122,10 +122,32 @@ jobs:
             exit 1
           }
 
+      - name: Commit generated Room schema snapshot to main
+        id: schema
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          SCHEMA_SOURCE="$(find app/schemas -type f -name '9.json' -print -quit)"
+          test -n "$SCHEMA_SOURCE"
+          cp "$SCHEMA_SOURCE" "$RUNNER_TEMP/room-schema-9.json"
+          rm -rf app/schemas/com.example.data.database.AppDatabase
+          git fetch origin main
+          git checkout -B main origin/main
+          mkdir -p app/schemas/com.example.data.database.AppDatabase
+          cp "$RUNNER_TEMP/room-schema-9.json" app/schemas/com.example.data.database.AppDatabase/9.json
+          git add app/schemas/com.example.data.database.AppDatabase/9.json
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "build: commit Room schema version 9 snapshot"
+            git push origin main
+          fi
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Write APK build information
         env:
           SIGNING_MODE: ${{ steps.debug-signing.outputs.mode }}
-          SOURCE_SHA: ${{ steps.wrapper.outputs.source_sha || github.sha }}
+          SOURCE_SHA: ${{ steps.schema.outputs.source_sha || steps.wrapper.outputs.source_sha || github.sha }}
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
