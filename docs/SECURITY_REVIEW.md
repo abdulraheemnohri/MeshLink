@@ -30,9 +30,11 @@ Importing a public identity payload now creates an untrusted peer record by defa
 
 ### 4. Group key rotation and member removal need protocol enforcement
 
-**Status: OPEN — local state update is not proof of remote revocation.**
+**Status: PARTIALLY IMPLEMENTED — encrypted epoch updates, admin checks and ACKs are wired; reliable all-member completion is not guaranteed.**
 
-Changing the locally stored group key or removing a member does not, by itself, prove that all remaining members received the new key or that the removed member cannot access future traffic. Rotation needs authenticated epoch distribution, acknowledgements, and rejection of stale-epoch messages. A removed member may retain old keys and decrypt historical content already captured.
+Admins can now rotate the group key or remove a member and rotate in one local database transaction. The new key and epoch are sent to remaining fingerprint-trusted members in signed, pairwise-encrypted `GROUP_KEY_UPDATE` packets. Receivers require a trusted sender who is an admin in their local group membership, validate 32-byte key material, reject stale epochs, apply revocation and send delivery ACKs. Group invitations also require a trusted peer, a valid 256-bit key, a creator ID matching the signed packet sender, and admin authorization for an existing group.
+
+This is not a reliable all-member commit protocol: queued/sent is not the same as delivered, ACKs are asynchronous, members that are offline may retain an old key until they reconnect, and no quorum/timeout/recovery state machine exists. A removed member can retain old keys and decrypt historical content already captured. The current pairwise wrapping still uses long-lived ECDH identity keys and does not provide forward secrecy.
 
 ## QR scanner reliability
 
@@ -64,3 +66,16 @@ This review is based on source inspection only. It is not a claim that every tra
 - Group member removal and group-key rotation UI messages now explicitly state that these are local-only operations and do not prove remote revocation or distribution.
 
 These mitigations reduce unsafe behavior but do not complete the secure session protocol or group epoch distribution.
+
+
+## Group epoch distribution implementation (2026-11-17)
+
+- Added `GROUP_KEY_UPDATE` packet type.
+- Added Room membership lookups and transactional admin-only rotation/removal operations.
+- Group key updates are encrypted for each remaining trusted member, signed by the sender identity, and store-and-forward routed.
+- Receivers verify the sender is trusted and an admin in the local group, validate the key length, reject stale epochs, apply optional member revocation, and acknowledge successful application.
+- Group invitation receive validates creator/sender identity and key material. Existing-group invitations from non-admins are rejected.
+- Invitation creation only records a member after the invite packet is successfully queued/sent.
+- UI reports queued/sent counts and clarifies that delivery acknowledgements are asynchronous.
+
+Open release gate: implement reliable all-member epoch acknowledgement/recovery and migrate pairwise encryption to authenticated ephemeral ECDH with transcript-bound HKDF and directional keys.
