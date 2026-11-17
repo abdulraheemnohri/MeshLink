@@ -15,7 +15,7 @@ This document separates transports that are implemented in the current Android s
 | Bluetooth LE | Low-power discovery and GATT data | Dedicated adapter exists; throughput is limited and transfers are fragmented |
 | NFC | Tap to exchange a small bootstrap payload / peer identity URI | Manifest permission and intent filter exist; this is not a general message/file transport and an end-to-end NDEF exchange adapter is not yet verified |
 | QR code | Optical, one-way-at-a-time exchange of identity/bootstrap data | Identity URI encoding/import exists; QR is not a continuous network transport |
-| Bluetooth Classic RFCOMM | Paired-device serial data channel | Enum capability only; no verified RFCOMM transport adapter in current transport registration |
+| Bluetooth Classic RFCOMM | Paired-device serial data channel | Registered RFCOMM adapter with signed identity HELLO and challenge-response connect path; requires system pairing and physical two-device validation |
 | Android Nearby Connections | Google Play services nearby peer-to-peer API | Not currently integrated. It can use Bluetooth, BLE and Wi-Fi under the hood; requires Play services and is not an independent radio |
 | USB / Ethernet / USB tethering | Local IP network over a cable or adapter | Can work through Local LAN if Android exposes a supported private interface; no dedicated USB transport |
 | Internet / WAN | Public IP connectivity across networks | Not a default offline mesh path. Requires explicit relay infrastructure, addressing, NAT traversal and security design |
@@ -35,7 +35,7 @@ The packet protocol (MLP/1) is transport-independent. The transport is the actua
 - **Disable transport:** never scan, advertise, or send using that adapter.
 - **Per-peer connection view:** show all currently discovered paths to the same cryptographic peer identity. Do not treat a BLE MAC, IP address, Wi-Fi Direct address, or Nearby endpoint ID as the peer's identity.
 
-Current implementation note: MeshRoutingEngine already prefers the endpoint's discovered transport and attempts other registered transports as fallback. A complete persisted user-facing transport policy (Automatic / Prefer / Only / Disabled) and multi-path per-peer UI still need implementation; do not present them as already shipped.
+Current implementation note: persisted Automatic / Prefer / Only policy, per-transport enable/disable controls, per-peer endpoint paths and fallback controls are implemented. Failover is sequential between discovered paths, not simultaneous multipath bonding. Bluetooth Classic connect exists but is not yet device-verified.
 
 ## Safety and compatibility rules
 
@@ -81,7 +81,7 @@ The following are separate concepts, not all independent radio protocols:
 - Wi-Fi Direct and Wi-Fi Aware: dedicated Android peer-to-peer paths.
 - BLE: dedicated GATT path.
 - NFC and QR: short-range / optical bootstrap, not continuous mesh data transports.
-- Bluetooth Classic RFCOMM and Google Nearby Connections: not registered data adapters yet.
+- Bluetooth Classic RFCOMM is registered with a source-level authenticated connect workflow; Google Nearby Connections is not implemented.
 - Cellular / Internet / satellite: gateway paths, not direct offline phone-to-phone links.
 - LoRa / Zigbee / Thread / Wi-Fi HaLow: external-radio gateway integrations, not phone-native transports.
 
@@ -120,7 +120,7 @@ NFC is explicitly a bootstrap/identity handoff path, not a continuous packet tra
 
 ### Remaining adapters (not shipped as operational)
 
-Bluetooth Classic RFCOMM and Google Nearby Connections are not yet registered in AppContainer. They must not appear as working transports until a complete adapter, permission lifecycle, framing, identity handshake, reconnect behavior and two-device tests are present. Cellular, internet and satellite are gateway paths; LoRa/Zigbee/Thread require external radio hardware. Same Wi-Fi, Ethernet and USB tethering use the existing IP/LAN adapter when Android exposes a reachable local interface.
+Bluetooth Classic RFCOMM is registered in AppContainer and has an authenticated connection workflow, but remains unverified on physical devices. Google Nearby Connections is not implemented. Neither should be marketed as production-verified. Cellular, internet and satellite are gateway paths; LoRa/Zigbee/Thread require external radio hardware. Same Wi-Fi, Ethernet and USB tethering use the existing IP/LAN adapter when Android exposes a reachable local interface.
 
 
 ## Bluetooth Classic RFCOMM adapter
@@ -175,3 +175,10 @@ This proves live possession of the claimed long-term signing key and makes captu
 - Pairing: performed by Android system settings; MeshLink does not silently pair or enable discoverability.
 - Security: signed MeshLink identity hello plus fresh nonce challenge/response before the transport reports connected.
 - Limitation: requires both phones to have Bluetooth enabled, Nearby Devices permissions granted, and devices paired/bonded at OS level. Validate on physical devices before production release.
+
+
+## Current runtime diagnostics
+
+The Diagnostics screen exposes a live per-adapter health stream: running state, last successful start time, last successful discovery time and the latest lifecycle error. These values describe local adapter lifecycle only; they do not prove that a remote peer is reachable or that an application packet was delivered.
+
+Google Nearby Connections remains intentionally optional and unimplemented. Integrating it requires Google Play services availability checks, endpoint lifecycle management, payload framing, authenticated MeshLink identity binding, reconnect behavior, and tests on devices with and without Play services.
