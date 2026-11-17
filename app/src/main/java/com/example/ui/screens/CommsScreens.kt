@@ -201,7 +201,8 @@ fun FileSharingScreen(
 fun TransferManagerScreen(
     transfers: List<FileTransferEntity>,
     onPause: (String) -> Unit,
-    onResume: (String) -> Unit
+    onResume: (String) -> Unit,
+    onExport: (String) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("ALL") }
@@ -322,6 +323,7 @@ fun TransferManagerScreen(
                         xfer = xfer,
                         onPause = { onPause(xfer.transferId) },
                         onResume = { onResume(xfer.transferId) },
+                        onExport = { onExport(xfer.transferId) },
                         showControls = true
                     )
                 }
@@ -352,6 +354,7 @@ private fun TransferCard(
     xfer: FileTransferEntity,
     onPause: () -> Unit,
     onResume: () -> Unit,
+    onExport: () -> Unit,
     showControls: Boolean
 ) {
     val progress = (xfer.completedChunks.toFloat() / xfer.totalChunks.coerceAtLeast(1).toFloat())
@@ -440,6 +443,15 @@ private fun TransferCard(
                         Icon(Icons.Filled.PlayArrow, contentDescription = "Resume transfer", tint = MeshEmerald)
                     }
                 }
+            }
+        }
+        if (xfer.status == "VERIFIED" && !xfer.isOutgoing) {
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.OutlinedButton(
+                onClick = onExport,
+                modifier = Modifier.fillMaxWidth().testTag("export_verified_" + xfer.transferId)
+            ) {
+                Text("Save verified file to Downloads")
             }
         }
         if (xfer.status == "FAILED" && !xfer.isOutgoing) {
