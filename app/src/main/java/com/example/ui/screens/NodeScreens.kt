@@ -809,6 +809,12 @@ fun SettingsScreen(
                         onCheckedChange = { c -> onUpdateSettings { it.copy(bluetoothClassicEnabled = c) } }
                     )
                     SettingSwitchRow(
+                        title = "Google Nearby Connections",
+                        subtitle = "Cross-device discovery and encrypted MeshLink packets; requires Google Play services",
+                        checked = settings.nearbyConnectionsEnabled,
+                        onCheckedChange = { c -> onUpdateSettings { it.copy(nearbyConnectionsEnabled = c) } }
+                    )
+                    SettingSwitchRow(
                         title = "Wi-Fi Direct (P2P)",
                         subtitle = "High-throughput peer-to-peer Wi-Fi links",
                         checked = settings.wifiDirectEnabled,
