@@ -318,6 +318,7 @@ fun ConnectionsScreen(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var peerFilter by remember { mutableStateOf("ALL") }
+    var expandedPeerId by remember { mutableStateOf<String?>(null) }
     val filteredPeers = peers.filter { peer ->
         val matchesQuery = searchQuery.isBlank() || peer.alias.contains(searchQuery, ignoreCase = true) || peer.deviceId.contains(searchQuery, ignoreCase = true) || peer.fingerprint.contains(searchQuery, ignoreCase = true)
         val matchesFilter = when (peerFilter) {
@@ -406,7 +407,12 @@ fun ConnectionsScreen(
                                     )
                                 }
                             }
-                            Row {
+                            Column(horizontalAlignment = Alignment.End) {
+                                TextButton(
+                                    onClick = { expandedPeerId = if (expandedPeerId == peer.deviceId) null else peer.deviceId },
+                                    modifier = Modifier.testTag("connection_profile_${peer.deviceId}")
+                                ) { Text(if (expandedPeerId == peer.deviceId) "Hide profile" else "View profile") }
+                                Row {
                                 IconButton(onClick = { onToggleVerify(peer) }) {
                                     Icon(
                                         imageVector = Icons.Filled.VerifiedUser,
@@ -429,6 +435,30 @@ fun ConnectionsScreen(
                                         contentDescription = "Block or unblock peer",
                                         tint = if (peer.blocked) MeshCrimson else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                }
+                                }
+                            }
+                        }
+                        if (expandedPeerId == peer.deviceId) {
+                            Spacer(Modifier.height(10.dp))
+                            androidx.compose.material3.HorizontalDivider()
+                            Text("Connection profile", style = MaterialTheme.typography.titleSmall)
+                            Text("Device ID: ${peer.deviceId}", style = MaterialTheme.typography.bodySmall)
+                            Text("Fingerprint: ${peer.fingerprint}", style = MaterialTheme.typography.bodySmall)
+                            Text("Trust: ${if (peer.verifiedByQr) "Verified by QR" else "Not verified"} · ${if (peer.blocked) "Blocked" else "Allowed"}", style = MaterialTheme.typography.bodySmall)
+                            Text("Active transport: ${peer.activeTransport}", style = MaterialTheme.typography.bodySmall)
+                            Text("Signal: ${if (peer.signalStrengthDbm > -100) "${peer.signalStrengthDbm} dBm" else "Not reported"}", style = MaterialTheme.typography.bodySmall)
+                            Text("Last endpoint: ${peer.lastAddress ?: "Unknown"}${peer.lastPort?.let { ":$it" } ?: ""}", style = MaterialTheme.typography.bodySmall)
+                            Text("Relay success / drops: ${peer.relaySuccessCount} / ${peer.relayDropCount}", style = MaterialTheme.typography.bodySmall)
+                            Text("Reputation: ${peer.reputationScore} · Session ratchet: ${peer.ratchetCounter}", style = MaterialTheme.typography.bodySmall)
+                            Text("Last seen: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(peer.lastSeenAt))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Public keys are stored locally and are not copied or exported from this profile.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val peerConnections = connections.filter { it.peerId == peer.deviceId }.take(5)
+                            if (peerConnections.isNotEmpty()) {
+                                Text("Recent connection paths", style = MaterialTheme.typography.labelLarge)
+                                peerConnections.forEach { path ->
+                                    Text("${path.transportType} · ${path.status} · RSSI ${path.rssiDbm} dBm · ${path.latencyMs} ms", style = MaterialTheme.typography.bodySmall)
+                                    Text("TX ${path.bytesSent} bytes · RX ${path.bytesReceived} bytes", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
