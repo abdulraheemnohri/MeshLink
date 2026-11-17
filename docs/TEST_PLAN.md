@@ -31,3 +31,14 @@
 ## Device lab
 
 Use at least two physical devices for direct transports and three for a real multi-hop test. Record Android version, manufacturer, transport, negotiated MTU, connection duration, throughput, retries, battery impact and screen state. Emulator-only success is not a mesh-network acceptance test.
+
+
+## Camera QR scanner acceptance
+
+- Open Identity → Scan QR with Camera and confirm CAMERA permission is requested only at that point.
+- Deny permission and confirm manual URI import and local QR display remain available.
+- Grant permission and scan a valid MeshLink identity QR while offline.
+- Confirm malformed, unrelated, oversized and self-identity payloads are rejected by the existing decoder/import checks.
+- Dismiss the scanner and confirm the camera is released.
+- Rotate the device, test low light/autofocus and verify the analyzer does not crash or retain camera resources.
+- Confirm no captured image or scan history is written to app storage.
