@@ -557,14 +557,23 @@ class MeshRepository(
         groupDao.upsertKeyUpdate(GroupKeyUpdateEntity(packetId, groupId, epoch, peerId, status))
     }
 
-    suspend fun markGroupKeyUpdateAcknowledged(packetId: String): Boolean {
+    suspend fun markGroupKeyUpdateAcknowledged(packetId: String, acknowledgingPeerId: String): Boolean {
         val updateRecord = groupDao.getKeyUpdateByPacketId(packetId) ?: return false
+        if (updateRecord.peerId != acknowledgingPeerId) {
+            logSecurityEvent(
+                eventType = "GROUP_KEY_ACK_SPOOF_REJECTED",
+                peerId = acknowledgingPeerId,
+                severity = "WARN",
+                summary = "Ignored a group key acknowledgement from a peer other than the intended recipient"
+            )
+            return false
+        }
         val now = System.currentTimeMillis()
         groupDao.updateKeyUpdateStatus(packetId, "ACKED", now, now)
         logSecurityEvent(
             eventType = "GROUP_KEY_UPDATE_ACKED",
             peerId = updateRecord.peerId,
-            summary = "Group key update acknowledged"
+            summary = "Intended group member acknowledged the key update"
         )
         return true
     }
