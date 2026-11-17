@@ -49,3 +49,5 @@ Review every route on a compact phone and a wide screen, with both light and dar
 - Navigation targets use stable LazyColumn item positions and test tags for UI regression tests.
 - Existing settings remain the source of truth; the overview does not introduce duplicate preference state.
 - Replaced an ambiguous ConcurrentHashMap membership operator in group routing with explicit `containsKey`, addressing the Kotlin compiler diagnostic in the previous Android CI run.
+
+- Added a Home dashboard Quick Actions panel for peer discovery, chats, file sharing, and diagnostics, each wired to its existing navigation route and tagged for UI tests.
