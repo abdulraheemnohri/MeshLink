@@ -353,3 +353,10 @@ The app's release keystore must remain private and outside Git. A signed release
 - Removed the unused `mesh-protocol` Gradle module after confirming the app did not depend on it. Its duplicate `MeshPacketModel` and proto schema were not generated, referenced or integrated with the active `com.example.core.protocol.MeshProtocol` implementation. Keeping two independent packet models risked protocol drift.
 - The active app now has one packet model and one active repository/routing implementation.
 - Remaining validation: Android CI after module removal; repository-wide reference scan and APK build.
+
+
+### Route metadata hardening and open relay-integrity limitation
+
+- Route metadata now enforces a 32-hop total budget, bounded hop counters, a visited-path limit of 32 and unique visited IDs before dispatch/receive.
+- A relay still decrements the hop budget exactly once and cannot forward to a visited peer or a packet destination already in the path.
+- Source audit confirmed that the origin signature intentionally excludes mutable hop/path fields. A malicious relay can therefore tamper with these routing hints without invalidating the origin signature. The path is not authenticated provenance; a versioned per-hop attestation design remains an explicit security gate.
