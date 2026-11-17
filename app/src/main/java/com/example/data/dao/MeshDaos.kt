@@ -30,6 +30,9 @@ interface ConnectionDao {
 
     @Query("UPDATE connections SET status = :status, endedAt = :endedAt WHERE peerId = :peerId AND status = 'CONNECTED'")
     suspend fun closeActiveConnectionsForPeer(peerId: String, status: String, endedAt: Long)
+
+    @Query("UPDATE connections SET status = 'DISCONNECTED', endedAt = :endedAt WHERE status IN ('CONNECTED', 'HANDSHAKING')")
+    suspend fun closeAllActiveConnections(endedAt: Long)
 }
 
 @Dao
@@ -177,6 +180,9 @@ interface PendingPacketDao {
 
     @Query("UPDATE pending_packets SET attemptCount = attemptCount + 1, lastAttemptAt = :attemptedAt WHERE messageId = :messageId")
     suspend fun recordAttempt(messageId: String, attemptedAt: Long): Int
+
+    @Query("UPDATE pending_packets SET attemptCount = attemptCount + 1, lastAttemptAt = :attemptedAt WHERE messageId = :messageId")
+    suspend fun recordAttempt(messageId: String, attemptedAt: Long)
 
     @Query("DELETE FROM pending_packets WHERE messageId = :messageId")
     suspend fun deleteById(messageId: String)
