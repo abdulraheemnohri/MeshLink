@@ -1,9 +1,11 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -12,13 +14,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.animateContentSize
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -53,6 +58,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -427,6 +433,10 @@ fun PrivateChatScreen(
     var draft by remember { mutableStateOf("") }
     var selectedStrategy by remember { mutableStateOf(RoutingStrategy.AUTONOMOUS) }
     var ttlHours by remember { mutableIntStateOf(24) }
+    val messageListState = rememberLazyListState()
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) messageListState.animateScrollToItem(messages.lastIndex)
+    }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -434,6 +444,7 @@ fun PrivateChatScreen(
                 .widthIn(max = 760.dp)
                 .fillMaxSize()
                 .padding(horizontal = 14.dp, vertical = 8.dp)
+                .imePadding()
         ) {
             // Security & Routing Strip
             GlassPanel(accentColor = if (peer?.verifiedByQr == true) MeshEmerald else NeonCyan) {
@@ -500,9 +511,11 @@ fun PrivateChatScreen(
             Spacer(Modifier.height(8.dp))
 
             LazyColumn(
+                state = messageListState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (messages.isEmpty()) {
@@ -535,8 +548,9 @@ fun PrivateChatScreen(
             ) {
                 OutlinedTextField(
                     value = draft,
-                    onValueChange = { draft = it },
+                    onValueChange = { draft = it.take(4000) },
                     placeholder = { Text("Encrypted mesh message...") },
+                    supportingText = { Text("${draft.length}/4000") },
                     modifier = Modifier
                         .weight(1f)
                         .testTag("private_chat_input"),
@@ -544,8 +558,10 @@ fun PrivateChatScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 IconButton(
+                    enabled = draft.isNotBlank() && peer != null,
                     onClick = {
-                        onSendMessage(draft, selectedStrategy, ttlHours)
+                        val outgoing = draft.trim()
+                        if (outgoing.isNotEmpty()) onSendMessage(outgoing, selectedStrategy, ttlHours)
                         draft = ""
                     },
                     modifier = Modifier
@@ -584,6 +600,10 @@ fun GroupChatScreen(
     var draft by remember { mutableStateOf("") }
     var showInviteDialog by remember { mutableStateOf(false) }
     var showMembersDialog by remember { mutableStateOf(false) }
+    val messageListState = rememberLazyListState()
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) messageListState.animateScrollToItem(messages.lastIndex)
+    }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -653,8 +673,9 @@ fun GroupChatScreen(
             ) {
                 OutlinedTextField(
                     value = draft,
-                    onValueChange = { draft = it },
+                    onValueChange = { draft = it.take(4000) },
                     placeholder = { Text("Broadcast to encrypted community...") },
+                    supportingText = { Text("${draft.length}/4000") },
                     modifier = Modifier
                         .weight(1f)
                         .testTag("group_chat_input"),
@@ -662,8 +683,10 @@ fun GroupChatScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 IconButton(
+                    enabled = draft.isNotBlank() && group != null,
                     onClick = {
-                        onSendMessage(draft)
+                        val outgoing = draft.trim()
+                        if (outgoing.isNotEmpty()) onSendMessage(outgoing)
                         draft = ""
                     },
                     modifier = Modifier
@@ -792,8 +815,10 @@ private fun MessageBubble(
         Column(
             modifier = Modifier
                 .widthIn(max = 320.dp)
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(if (msg.isOutgoing) 18.dp else 18.dp))
                 .background(bubbleColor)
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
+                .animateContentSize()
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             if (!msg.isOutgoing) {
