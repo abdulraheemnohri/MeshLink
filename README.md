@@ -76,7 +76,7 @@ The debug APK is normally generated at:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-On Windows PowerShell, use `.\\gradlew.bat` in place of `./gradlew` for the same tasks.
+On Windows PowerShell, use `.\gradlew.bat` in place of `./gradlew` for the same tasks.
 
 GitHub Actions verifies the wrapper, compiles the debug APK and runs unit tests. Check the workflow result for the exact commit before treating a change as build-verified.
 
