@@ -9,7 +9,16 @@ import com.example.core.protocol.MeshPacket
  * forward a packet whose destination is already this node.
  */
 object MeshForwardingPolicy {
+    const val MAX_ROUTE_HOPS = 32
+
+    fun hasValidRouteMetadata(packet: MeshPacket): Boolean =
+        packet.hopLimit in 0..MAX_ROUTE_HOPS &&
+            packet.hopCount in 0..MAX_ROUTE_HOPS &&
+            packet.visitedPeers.size <= MAX_ROUTE_HOPS &&
+            packet.visitedPeers.distinct().size == packet.visitedPeers.size
+
     fun forwardForRelay(packet: MeshPacket, localPeerId: String): MeshPacket? {
+        if (!hasValidRouteMetadata(packet)) return null
         if (localPeerId.isBlank()) return null
         if (packet.senderId == localPeerId || packet.destinationId == localPeerId) return null
         if (packet.hopLimit <= 1 || localPeerId in packet.visitedPeers) return null
