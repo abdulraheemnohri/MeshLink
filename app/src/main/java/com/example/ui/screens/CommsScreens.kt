@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -267,7 +269,10 @@ fun TransferManagerScreen(
                 )
             }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     listOf("ALL", "ACTIVE", "ATTENTION", "VERIFIED").forEach { filter ->
                         FilterChip(
                             selected = selectedFilter == filter,
@@ -391,7 +396,7 @@ private fun TransferCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                "${formatTransferBytes(completedBytes)} / ${formatTransferBytes(xfer.totalBytes)}",
+                "${if (isVerified) "" else "≈"}${formatTransferBytes(completedBytes)} / ${formatTransferBytes(xfer.totalBytes)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
