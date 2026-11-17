@@ -45,13 +45,6 @@ data class FileChunkIncoming(
     val payloadJson: JSONObject
 )
 
-private data class PendingPrivateText(
-    val text: String,
-    val strategy: RoutingStrategy?,
-    val ttlHours: Int?,
-    val emergency: Boolean
-)
-
 class MeshRoutingEngine(
     private val context: Context,
     private val repository: MeshRepository,
@@ -79,7 +72,6 @@ class MeshRoutingEngine(
 
     private val _sessionEstablished = MutableSharedFlow<String>(extraBufferCapacity = 32)
     val sessionEstablished: SharedFlow<String> = _sessionEstablished.asSharedFlow()
-    private val pendingPrivateTexts = ConcurrentHashMap<String, MutableList<PendingPrivateText>>()
 
     fun registerTransports(list: List<MeshTransport>) {
         transports.clear()
@@ -127,23 +119,33 @@ class MeshRoutingEngine(
         val session = getActiveEphemeralSession(peerId)
         if (session == null) {
             if (activeEndpoints[peerId] == null) return false
-            val pending = pendingPrivateTexts.computeIfAbsent(peerId) {
-                java.util.Collections.synchronizedList(mutableListOf())
-            }
-            val item = PendingPrivateText(plaintext, strategyOverride, ttlHoursOverride, isEmergency)
-            pending.add(item)
+            val strategy = strategyOverride ?: RoutingStrategy.valueOf(settings.defaultRoutingStrategy)
+            val pendingMessage = MessageEntity(
+                messageId = UUID.randomUUID().toString(),
+                conversationId = peerId,
+                senderId = local.deviceId,
+                senderAlias = local.alias,
+                destinationId = peerId,
+                isGroup = false,
+                isOutgoing = true,
+                messageKind = if (isEmergency) "EMERGENCY" else "TEXT",
+                body = plaintext,
+                deliveryStatus = "WAITING_SESSION",
+                routingStrategy = strategy.name,
+                expiresAt = expiresAt
+            )
+            repository.saveMessage(pendingMessage)
             val started = initiateEphemeralSession(peerId)
             val handshakeAlreadyPending = pendingEphemeralOffers.values.any { it.offer.responderId == peerId }
             if (!started && getActiveEphemeralSession(peerId) == null && !handshakeAlreadyPending) {
-                pending.remove(item)
-                if (pending.isEmpty()) pendingPrivateTexts.remove(peerId, pending)
+                repository.updateMessageStatus(pendingMessage.messageId, "FAILED", null, 0)
                 return false
             }
             repository.logNetworkEvent(
                 transportType = "SECURITY",
                 eventType = "SESSION_REQUIRED",
                 peerId = peerId,
-                summary = "Private message retained in memory and will retry automatically after authenticated session negotiation"
+                summary = "Private message saved locally and will retry automatically after authenticated session negotiation"
             )
             return true
         }
@@ -647,23 +649,42 @@ class MeshRoutingEngine(
     }
 
     private fun retryPendingPrivateTexts(peerId: String) {
-        val pending = pendingPrivateTexts.remove(peerId) ?: return
-        val snapshot = synchronized(pending) { pending.toList().also { pending.clear() } }
-        if (snapshot.isEmpty()) return
         scope.launch {
-            snapshot.forEach { item ->
-                val sent = sendDirectTextMessage(
-                    peerId = peerId,
-                    plaintext = item.text,
-                    strategyOverride = item.strategy,
-                    ttlHoursOverride = item.ttlHours,
-                    isEmergency = item.emergency
+            val pending = repository.getPendingSessionMessages(peerId)
+            pending.forEach { message ->
+                val session = getActiveEphemeralSession(peerId) ?: return@forEach
+                val endpoint = activeEndpoints[peerId]
+                if (endpoint == null) {
+                    repository.updateMessageStatus(message.messageId, "FAILED", null, 0)
+                    return@forEach
+                }
+                val local = repository.ensureInitialized()
+                val payload = JSONObject().apply {
+                    put("text", message.body)
+                    put("alias", local.alias)
+                    put("emergency", message.messageKind == "EMERGENCY")
+                }.toString()
+                val encrypted = "MLSE1:" + crypto.encryptWithSessionKey(payload, session.sendKey)
+                val packet = crypto.signPacket(
+                    MeshPacket(
+                        messageId = message.messageId,
+                        senderId = local.deviceId,
+                        destinationId = peerId,
+                        packetType = if (message.messageKind == "EMERGENCY") PacketType.EMERGENCY_BEACON else PacketType.MESSAGE,
+                        expiresAt = message.expiresAt,
+                        hopLimit = 6,
+                        routingStrategy = runCatching { RoutingStrategy.valueOf(message.routingStrategy) }.getOrDefault(RoutingStrategy.DIRECT),
+                        encryptedPayload = encrypted,
+                        visitedPeers = listOf(local.deviceId),
+                        priority = if (message.messageKind == "EMERGENCY") MeshPacket.PRIORITY_EMERGENCY else MeshPacket.PRIORITY_NORMAL
+                    )
                 )
-                if (!sent) repository.logNetworkEvent(
-                    transportType = "SECURITY",
-                    eventType = "SESSION_RETRY_FAILED",
-                    peerId = peerId,
-                    summary = "Automatic private-message retry failed; user can retry when peer is reachable"
+                val sent = sendOverBestTransport(endpoint, packet)
+                repository.updateMessageStatus(
+                    message.messageId,
+                    if (sent) "QUEUED" else "FAILED",
+                    null,
+                    packet.hopCount
                 )
             }
         }
