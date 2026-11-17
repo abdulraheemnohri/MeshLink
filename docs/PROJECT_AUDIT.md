@@ -66,6 +66,13 @@ The app now has a local-only profile editor available from the Node navigation t
 
 Profile data is descriptive, not a secret store. Do not put passwords, recovery phrases or private keys in profile fields. A future peer-profile exchange must define consent, signature binding, versioning and anti-spoofing before publishing profile details.
 
+## Android permission manager
+
+- Settings provides per-feature runtime permission controls for camera, Bluetooth / Nearby Devices, Nearby Wi-Fi, location, microphone and notifications.
+- Runtime permission requests are user initiated; camera, microphone and notification access are not required merely to start radio transports.
+- File access uses the Storage Access Framework; broad storage/media permissions are intentionally omitted.
+- System-managed permissions such as NFC, biometric, wake lock and foreground-service declarations are documented separately from runtime prompts.
+
 ## QR scanner changes in this audit
 
 - Added CameraX camera2/core/lifecycle/view runtime dependencies.
@@ -80,7 +87,7 @@ Profile data is descriptive, not a secret store. Do not put passwords, recovery 
 
 | Area | Current assessment | Required next action |
 |---|---|---|
-| Google Nearby Connections | Not integrated | Optional adapter with Play Services availability checks, authenticated MeshLink identity binding, payload framing and tests |
+| Google Nearby Connections | Optional P2P_CLUSTER adapter with signed HELLO, nonce proof, and 1,000,000-byte application frame cap | Requires Play Services and current permissions; compile/test CI and two-device validation remain release gates |
 | NFC | NDEF URI intent parsing/helper exists; end-to-end tag writer/reader handoff not verified | Validate actual tag read/write workflows on supported hardware; do not claim Android Beam |
 | Bluetooth Classic | RFCOMM adapter and authenticated handshake code exist | Two-device pairing, reconnect, bidirectional delivery and process-restart tests |
 | BLE / Wi-Fi Direct / Wi-Fi Aware / LAN | Source adapters exist | Two-device interoperability, large-frame, reconnect and screen-off tests per adapter |
@@ -108,7 +115,7 @@ The current application ID remains `com.aistudio.meshlink.rx7kqm` to avoid silen
 
 ## Scope note
 
-This audit does not claim that every possible radio or network type is a native Android transport. Cellular/internet/satellite require explicit gateways; LoRa/Zigbee/Thread/HaLow require external radio hardware. QR and NFC are bootstrap channels, not mesh data links. Nearby Connections is not currently integrated.
+This audit does not claim that every possible radio or network type is a native Android transport. Cellular/internet/satellite require explicit gateways; LoRa/Zigbee/Thread/HaLow require external radio hardware. QR and NFC are bootstrap channels, not mesh data links. Google Nearby Connections is integrated as an optional transport but still requires physical-device validation.
 
 
 ## QR scanner reliability
