@@ -292,3 +292,13 @@ The app's release keystore must remain private and outside Git. A signed release
 - Group member controls now reflect the local member's ADMIN role. Admins can distribute role changes, invite trusted peers over authenticated peer connections, rotate keys, retry pending key updates, and remove members with a confirmation that explains key rotation. Non-admin controls are disabled in the UI; routing/repository authorization remains the enforcement boundary.
 - Legacy group QR invitations and pasted legacy group invite URIs remain disabled because they embed the shared group encryption key. Do not re-enable them. A future QR invitation must be recipient-specific and encrypted to that recipient's verified public key, with replay protection and expiry.
 - Remaining validation: Android CI; save/share PNG on Android 10+; import QR from Gallery/Files and malformed/non-MeshLink image tests; test a high-resolution photo; two-device group role change, member removal, key rotation, ACK/retry, and offline member recovery. Physical device validation has not been performed by this code change.
+
+
+## Database migration safety (2026-11-17)
+
+- Room schema version remains 8. The repository history confirms the initial checked-in database schema was version 3; migrations 3→4→5→6→7→8 are registered in order.
+- Removed `fallbackToDestructiveMigration(dropAllTables = true)`. An unknown or unsupported upgrade path now fails closed rather than deleting the user's local identity, peers, conversations, groups, pending packets, event history or transfer metadata.
+- Enabled Room schema export and configured KSP to write schema snapshots under `app/schemas`.
+- Exposed the existing migration objects internally and added a Robolectric regression test that applies every migration from version 3 through version 8, checks the new columns/index, and verifies pre-existing settings and group-member rows survive.
+- Version 1 and 2 database schemas are not present in repository history or schema snapshots. They are deliberately not guessed. If an installation with either version exists, the app will now preserve its database and report a migration-path error instead of silently wiping it. A compatible migration requires the actual historical schema.
+- Remaining validation: run `testDebugUnitTest` and `assembleDebug` on CI; capture and commit the generated Room schema JSON for version 8; verify an upgrade using a real version-3 database fixture and an upgrade from the previous published APK. Do not call migration safety fully release-verified until those checks pass.
