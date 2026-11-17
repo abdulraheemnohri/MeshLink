@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.database.AppDatabase
 import com.example.data.entities.GroupKeyUpdateEntity
+import com.example.data.entities.GroupRoleUpdateEntity
 import com.example.data.entities.GroupEntity
 import com.example.data.entities.GroupMemberEntity
 import com.example.data.entities.DeviceIdentity
@@ -113,6 +114,32 @@ class AppDatabaseTest {
         )
         assertEquals(1, dao.countUnacknowledgedKeyUpdates("group_recovery"))
         assertEquals("removed_member", dao.getUnresolvedKeyUpdates("group_recovery").single().revokedPeerId)
+    }
+
+    @Test
+    fun groupRoleUpdateDao_persistsPerRecipientAcknowledgementsAndRecovery() = runBlocking {
+        val dao = db.groupDao()
+        dao.upsertRoleUpdate(
+            GroupRoleUpdateEntity(
+                packetId = "role_packet_1",
+                groupId = "role_group",
+                epoch = 3,
+                peerId = "recipient_1",
+                targetPeerId = "member_2",
+                role = "ADMIN",
+                issuedAt = 1234L,
+                status = "QUEUED"
+            )
+        )
+
+        assertEquals(1, dao.countUnacknowledgedRoleUpdates("role_group"))
+        assertEquals("recipient_1", dao.getUnresolvedRoleUpdatesForPeer("recipient_1").single().peerId)
+        assertEquals("ADMIN", dao.getRoleUpdateByPacketId("role_packet_1")?.role)
+
+        dao.updateRoleUpdateStatus("role_packet_1", "ACKED", 5678L, 5678L)
+        assertEquals(0, dao.countUnacknowledgedRoleUpdates("role_group"))
+        assertTrue(dao.getUnresolvedRoleUpdates("role_group").isEmpty())
+        assertEquals(5678L, dao.getRoleUpdateByPacketId("role_packet_1")?.acknowledgedAt)
     }
 
     @Test
