@@ -39,17 +39,30 @@ jobs:
           java -version
           gradle --version
 
-      - name: Generate ephemeral debug signing key
+      - name: Restore stable debug signing key or create temporary CI key
+        id: debug-signing
+        env:
+          MESHLINK_DEBUG_KEYSTORE_BASE64: ${{ secrets.MESHLINK_DEBUG_KEYSTORE_BASE64 }}
         run: |
-          keytool -genkeypair -v \
-            -keystore debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
+          if [ -n "$MESHLINK_DEBUG_KEYSTORE_BASE64" ]; then
+            printf '%s' "$MESHLINK_DEBUG_KEYSTORE_BASE64" | base64 --decode > debug.keystore
+            keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey >/dev/null
+            echo "mode=stable" >> "$GITHUB_OUTPUT"
+            echo "A stable owner-provided debug signing key is configured." >> "$GITHUB_STEP_SUMMARY"
+          else
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            echo "mode=temporary" >> "$GITHUB_OUTPUT"
+            echo "::warning::No MESHLINK_DEBUG_KEYSTORE_BASE64 secret is configured. This APK is for fresh installs only; it may not update an existing MeshLink installation."
+            echo "No stable debug key secret is configured. This artifact is fresh-install only and may not update an existing install." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Compile debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
@@ -57,11 +70,31 @@ jobs:
       - name: Run unit tests
         run: gradle --no-daemon --stacktrace testDebugUnitTest
 
-      - name: Upload debug APK
+      - name: Write APK build information
+        env:
+          SIGNING_MODE: ${{ steps.debug-signing.outputs.mode }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          {
+            echo "applicationId=com.aistudio.meshlink.rx7kqm"
+            echo "versionName=1.0"
+            echo "versionCode=1"
+            echo "buildType=debug"
+            echo "signingMode=$SIGNING_MODE"
+            echo "commit=$SOURCE_SHA"
+            echo "sha256=$(sha256sum "$APK" | cut -d ' ' -f 1)"
+          } > app/build/outputs/apk/debug/build-info.txt
+          cat app/build/outputs/apk/debug/build-info.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload debug APK and build information
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: meshlink-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/build-info.txt
           if-no-files-found: error
           retention-days: 14
