@@ -64,3 +64,12 @@ Review every route on a compact phone and a wide screen, with both light and dar
 - Accessibility baseline: meaningful icon descriptions for search, visible text labels on actions, state text alongside relay controls, and no signal-strength estimates unless supplied by a transport adapter.
 - Remaining accessibility QA: verify TalkBack traversal, large font layouts, contrast in both themes, and reduced-motion behavior on Android devices.
 - Remaining network UI work: expose measured per-transport health snapshots from the transport coordinator and build a true peer-to-peer topology from actual route/endpoint data rather than assuming every connected peer has a direct link.
+
+
+## Live Network Control Center (2026-11-17)
+
+- Added a unified network screen combining relay control, active connection records, pending packet count, adapter health and recent network events.
+- Added navigation to connections, topology and diagnostics using existing routes.
+- Transport cards show reported runtime state, discovery timestamps and adapter errors. They do not invent signal strength for transports that do not expose it.
+- Connection RSSI and latency are displayed from persisted connection measurements only.
+- Settings search and category filters already exist and remain available. Physical radio acceptance and actual signal reporting remain dependent on adapter and device support.
