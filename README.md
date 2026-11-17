@@ -82,6 +82,7 @@ A GitHub Actions workflow is provided at `.github/workflows/android-ci.yml`. It 
 - [Networking modes, supported transports and selection policy](docs/NETWORKING_MATRIX.md)
 - [Architecture and implementation status](docs/IMPLEMENTATION_STATUS.md)
 - [Automated and physical-device test plan](docs/TEST_PLAN.md)
+- [Android APK installation and signing troubleshooting](docs/ANDROID_INSTALLATION.md)
 - [Security policy](SECURITY.md), when present in this repository
 
 ## Contributing
