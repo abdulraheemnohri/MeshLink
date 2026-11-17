@@ -390,8 +390,15 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     fun removeGroupMember(groupId: String, peerId: String) {
         viewModelScope.launch {
-            repository.removeGroupMember(groupId, peerId)
-            _snackMessages.tryEmit("Member removed locally only. Remote key rotation and revocation are not yet synchronized.")
+            runCatching { routingEngine.removeGroupMemberAndRotate(groupId, peerId) }
+                .onSuccess { (queued, total) ->
+                    _snackMessages.tryEmit(
+                        "Member removed locally and epoch rotated. Key update queued/sent to $queued of $total remaining members; delivery ACKs are asynchronous."
+                    )
+                }
+                .onFailure { error ->
+                    _snackMessages.tryEmit("Could not remove member or rotate key: ${error.message ?: "operation failed"}")
+                }
         }
     }
 
@@ -404,8 +411,15 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     fun rotateGroupKey(groupId: String) {
         viewModelScope.launch {
-            repository.rotateGroupKey(groupId)
-            _snackMessages.tryEmit("Local group key changed only. Remote members have NOT received the new key; do not assume revocation is complete.")
+            runCatching { routingEngine.rotateGroupKeyAndDistribute(groupId) }
+                .onSuccess { (queued, total) ->
+                    _snackMessages.tryEmit(
+                        "New group key epoch created. Update queued/sent to $queued of $total members; delivery ACKs are asynchronous."
+                    )
+                }
+                .onFailure { error ->
+                    _snackMessages.tryEmit("Could not rotate group key: ${error.message ?: "operation failed"}")
+                }
         }
     }
 
