@@ -81,10 +81,11 @@ class BleMeshTransport(
             }
             // Bluetooth permissions can be revoked between the check and framework call.
             val deviceName = if (canReadDeviceName) {
-                runCatching { device.name }
-                    .getOrElse { error ->
-                        if (error is SecurityException) null else throw error
-                    }
+                try {
+                    device.name
+                } catch (_: SecurityException) {
+                    null
+                }
             } else {
                 null
             }
