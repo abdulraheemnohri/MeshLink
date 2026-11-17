@@ -577,6 +577,7 @@ fun GroupChatScreen(
     onRemoveMember: (String) -> Unit,
     onToggleRole: (GroupMemberEntity) -> Unit,
     onRotateKey: () -> Unit,
+    onRetryKeyUpdates: () -> Unit,
     onReact: (MessageEntity, String) -> Unit
 ) {
     val context = LocalContext.current
