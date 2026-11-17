@@ -31,3 +31,12 @@ MeshLink uses a dark-first, technical interface: obsidian surfaces, restrained c
 
 ## Remaining design QA
 Review every route on a compact phone and a wide screen, with both light and dark themes and Android font scaling. Verify keyboard insets on chat and forms, TalkBack labels, contrast, large text wrapping, empty/loading/error states, and animation behavior under Android's reduced-motion settings. Physical-device screenshots and visual regression checks are still required before claiming pixel-perfect polish.
+
+### File-transfer manager polish
+
+- Queue overview summarizes active, verified, and attention-required transfers from persisted transfer records.
+- Search matches file name, peer alias, transport, and current status; filters separate active, attention-required, and verified items.
+- Progress presents acknowledged chunk count, a byte estimate derived from chunk completion, and a percentage. It is checkpoint progress, not a throughput or ETA claim.
+- Pause/resume controls are shown only for outgoing transfers, matching the manager's supported operations. Failed incoming files explain that the sender must resend them.
+- Verified state is explicitly labeled as receiver-side SHA-256 verification; unverified records continue to show a shortened digest for reference.
+- Empty and no-match states guide users back to file selection or filter adjustment.
