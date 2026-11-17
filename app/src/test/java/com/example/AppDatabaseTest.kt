@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.database.AppDatabase
+import com.example.data.entities.ConnectionEntity
 import com.example.data.entities.GroupKeyUpdateEntity
 import com.example.data.entities.GroupRoleUpdateEntity
 import com.example.data.entities.GroupEntity
@@ -186,6 +187,50 @@ class AppDatabaseTest {
         val recovered = dao.getById("queued-retry")
         assertEquals(2, recovered?.attemptCount)
         assertEquals(130_000L, recovered?.lastAttemptAt)
+    }
+
+    @Test
+    fun relayRecovery_closesStaleConnectedAndHandshakingRows() = runBlocking {
+        val dao = db.connectionDao()
+        dao.insert(
+            ConnectionEntity(
+                peerId = "peer_connected",
+                peerAlias = "Connected",
+                transportType = "BLE",
+                remoteAddress = "endpoint-a",
+                status = "CONNECTED",
+                startedAt = 100L
+            )
+        )
+        dao.insert(
+            ConnectionEntity(
+                peerId = "peer_handshaking",
+                peerAlias = "Handshaking",
+                transportType = "LOCAL_LAN",
+                remoteAddress = "endpoint-b",
+                status = "HANDSHAKING",
+                startedAt = 200L
+            )
+        )
+        dao.insert(
+            ConnectionEntity(
+                peerId = "peer_closed",
+                peerAlias = "Already closed",
+                transportType = "BLE",
+                remoteAddress = "endpoint-c",
+                status = "DISCONNECTED",
+                startedAt = 300L
+            )
+        )
+
+        dao.closeAllActiveConnections(5_000L)
+        val rows = dao.observeConnections().first().associateBy { it.peerId }
+
+        assertEquals("DISCONNECTED", rows["peer_connected"]?.status)
+        assertEquals(5_000L, rows["peer_connected"]?.endedAt)
+        assertEquals("DISCONNECTED", rows["peer_handshaking"]?.status)
+        assertEquals(5_000L, rows["peer_handshaking"]?.endedAt)
+        assertNull(rows["peer_closed"]?.endedAt)
     }
 
     @Test
