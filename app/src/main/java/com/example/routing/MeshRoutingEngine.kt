@@ -296,55 +296,12 @@ class MeshRoutingEngine(
         val group = repository.getGroupById(groupId) ?: throw IllegalArgumentException("Group not found")
         require(repository.isGroupAdmin(groupId, local.deviceId)) { "Only a group admin can update roles" }
         val members = repository.getGroupMembersOnce(groupId)
-        val target = members.firstOrNull { it.peerId == targetPeerId }
-            ?: throw IllegalArgumentException("Group member not found")
-        if (target.role == "ADMIN" && role == "MEMBER") {
-            require(members.count { it.role == "ADMIN" } > 1) { "Cannot demote the last group admin" }
-        }
-        require(targetPeerId != local.deviceId || role == "ADMIN") { "The current admin cannot demote itself" }
+        require(members.any { it.peerId == targetPeerId }) { "Group member not found" }
         val issuedAt = System.currentTimeMillis()
-        repository.updateGroupMemberRole(groupId, targetPeerId, role, issuedAt)
-        repository.supersedeOlderGroupRoleUpdatesForTarget(groupId, targetPeerId, issuedAt)
-        val payload = JSONObject().apply {
-            put("groupId", groupId)
-            put("targetPeerId", targetPeerId)
-            put("role", role)
-            put("epoch", group.keyEpoch)
-            put("issuedAt", issuedAt)
-            put("issuer", local.deviceId)
-        }.toString()
         val recipients = members.filter { it.peerId != local.deviceId }
-        var queuedOrSent = 0
-        recipients.forEach { member ->
-            val peer = repository.getPeerById(member.peerId)
-            if (peer == null || !peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) {
-                repository.recordGroupRoleUpdate(
-                    GroupRoleUpdateEntity(
-                        packetId = java.util.UUID.randomUUID().toString(),
-                        groupId = groupId,
-                        epoch = group.keyEpoch,
-                        peerId = member.peerId,
-                        targetPeerId = targetPeerId,
-                        role = role,
-                        issuedAt = issuedAt,
-                        status = "FAILED"
-                    )
-                )
-                return@forEach
-            }
-            val packet = crypto.signPacket(
-                MeshPacket(
-                    senderId = local.deviceId,
-                    destinationId = member.peerId,
-                    packetType = PacketType.GROUP_MEMBER_ROLE_UPDATE,
-                    routingStrategy = RoutingStrategy.STORE_AND_FORWARD,
-                    encryptedPayload = crypto.encryptForPeer(payload, peer.agreementPublicKey, peer.ratchetCounter),
-                    visitedPeers = listOf(local.deviceId),
-                    priority = MeshPacket.PRIORITY_HIGH
-                )
-            )
-            val record = GroupRoleUpdateEntity(
-                packetId = packet.messageId,
+        val outbox = recipients.map { member ->
+            GroupRoleUpdateEntity(
+                packetId = java.util.UUID.randomUUID().toString(),
                 groupId = groupId,
                 epoch = group.keyEpoch,
                 peerId = member.peerId,
@@ -353,18 +310,55 @@ class MeshRoutingEngine(
                 issuedAt = issuedAt,
                 status = "PENDING"
             )
-            repository.recordGroupRoleUpdate(record)
+        }
+
+        // Local role state and every recipient's durable outbox record commit together.
+        // A process death after this point is recoverable by the reconnect retry worker.
+        val persistedOutbox = repository.updateGroupMemberRoleAndRecordOutbox(
+            groupId = groupId,
+            targetPeerId = targetPeerId,
+            role = role,
+            expectedEpoch = group.keyEpoch,
+            issuedAt = issuedAt,
+            outbox = outbox
+        )
+
+        var queuedOrSent = 0
+        persistedOutbox.forEach { record ->
+            val peer = repository.getPeerById(record.peerId)
+            if (peer == null || !peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) {
+                repository.updateGroupRoleUpdateStatus(record.packetId, "FAILED")
+                return@forEach
+            }
+            val payload = JSONObject().apply {
+                put("groupId", record.groupId)
+                put("targetPeerId", record.targetPeerId)
+                put("role", record.role)
+                put("epoch", record.epoch)
+                put("issuedAt", record.issuedAt)
+                put("issuer", local.deviceId)
+            }.toString()
+            val packet = crypto.signPacket(
+                MeshPacket(
+                    messageId = record.packetId,
+                    senderId = local.deviceId,
+                    destinationId = record.peerId,
+                    packetType = PacketType.GROUP_MEMBER_ROLE_UPDATE,
+                    routingStrategy = RoutingStrategy.STORE_AND_FORWARD,
+                    encryptedPayload = crypto.encryptForPeer(payload, peer.agreementPublicKey, peer.ratchetCounter),
+                    visitedPeers = listOf(local.deviceId),
+                    priority = MeshPacket.PRIORITY_HIGH
+                )
+            )
             val deliveredNow = dispatchPacket(packet)
             val queued = repository.getPendingPacketById(packet.messageId) != null
-            repository.recordGroupRoleUpdate(
-                record.copy(
-                    status = when {
-                        deliveredNow -> "SENT"
-                        queued -> "QUEUED"
-                        else -> "FAILED"
-                    },
-                    updatedAt = System.currentTimeMillis()
-                )
+            repository.updateGroupRoleUpdateStatus(
+                record.packetId,
+                when {
+                    deliveredNow -> "SENT"
+                    queued -> "QUEUED"
+                    else -> "FAILED"
+                }
             )
             if (deliveredNow || queued) queuedOrSent++
         }
