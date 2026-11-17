@@ -78,8 +78,11 @@ interface GroupDao {
     @Query("DELETE FROM group_members WHERE groupId = :groupId AND peerId = :peerId")
     suspend fun removeMember(groupId: String, peerId: String)
 
-    @Query("UPDATE group_members SET role = :role WHERE groupId = :groupId AND peerId = :peerId")
-    suspend fun updateMemberRole(groupId: String, peerId: String, role: String)
+    @Query("UPDATE group_members SET role = :role, roleUpdatedAt = :updatedAt WHERE groupId = :groupId AND peerId = :peerId")
+    suspend fun updateMemberRole(groupId: String, peerId: String, role: String, updatedAt: Long)
+
+    @Query("SELECT COUNT(*) FROM group_members WHERE groupId = :groupId AND role = 'ADMIN'")
+    suspend fun countAdmins(groupId: String): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertKeyUpdate(update: GroupKeyUpdateEntity)
