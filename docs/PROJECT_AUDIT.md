@@ -126,3 +126,12 @@ See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for high-priority open protocol ris
 - Regression tests cover key-free group QR output, rejection of legacy key-bearing QR payloads, untrusted initial imports, and rejection of peer key replacement.
 
 Still open: the long-lived ECDH pairwise key schedule has not been replaced with an authenticated ephemeral session protocol. Group epoch delivery/acknowledgement is also not implemented. The above are mitigations, not a complete security protocol migration.
+
+
+## Group key epoch delivery hardening — 2026-11-17
+
+Group key rotation and member removal now create a new epoch in a Room transaction after checking that the local member is an admin. The routing engine sends signed, per-recipient encrypted `GROUP_KEY_UPDATE` packets to remaining trusted peers. Receivers require a trusted sender who is an admin in the local group, validate 256-bit key material, reject stale epochs, apply member revocation and send delivery acknowledgements. The UI reports the number queued or sent; acknowledgements remain asynchronous, so this is not an all-member commit guarantee.
+
+Group invitations are accepted only from a trusted peer, must carry a valid group key, and must name the signed packet sender as creator. Invitations into an existing group require the sender to be an admin. Member records are added locally only when the invitation was sent or persisted to the store-and-forward queue. Group role changes remain disabled in the UI until they can be replicated and acknowledged safely.
+
+Pairwise key wrapping still uses the legacy long-lived ECDH identity keys. Forward secrecy and a reliable all-member epoch acknowledgement/recovery protocol remain open security release gates.
