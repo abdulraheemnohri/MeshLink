@@ -6,6 +6,7 @@ import com.example.transport.DiscoveredEndpoint
 import com.example.transport.MeshTransport
 import com.example.transport.TransportEvent
 import com.example.transport.UniversalDiscoveryCoordinator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,7 +23,8 @@ class UniversalDiscoveryCoordinatorTest {
     private class FakeTransport(
         override val transportType: TransportType,
         var failStart: Boolean = false,
-        var connectResult: Boolean = true
+        var connectResult: Boolean = true,
+        var cancelStart: Boolean = false
     ) : MeshTransport {
         private val mutableEvents = MutableSharedFlow<TransportEvent>(extraBufferCapacity = 16)
         override val events = mutableEvents
@@ -34,6 +36,7 @@ class UniversalDiscoveryCoordinatorTest {
         }
 
         override suspend fun start() {
+            if (cancelStart) throw CancellationException("startup cancelled")
             if (failStart) error("radio unavailable")
             isRunning = true
         }
@@ -102,6 +105,28 @@ class UniversalDiscoveryCoordinatorTest {
         coordinator.pruneExpired(now = 1_051L)
         assertTrue(coordinator.endpointsFor("peer-1").isEmpty())
         assertTrue(coordinator.peers.value.isEmpty())
+        coordinator.close()
+        scope.coroutineContext[Job]?.cancel()
+    }
+
+    @Test
+    fun cancellationDuringStartPropagatesAndDoesNotStartFollowingAdapters() = runBlocking<Unit> {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val cancelledBle = FakeTransport(TransportType.BLE, cancelStart = true)
+        val shouldNotStartLan = FakeTransport(TransportType.LOCAL_LAN)
+        val coordinator = UniversalDiscoveryCoordinator(listOf(cancelledBle, shouldNotStartLan), scope)
+
+        var cancellationPropagated = false
+        try {
+            coordinator.start(setOf(TransportType.BLE, TransportType.LOCAL_LAN))
+        } catch (_: CancellationException) {
+            cancellationPropagated = true
+        }
+
+        assertTrue(cancellationPropagated)
+        assertFalse(cancelledBle.isRunning)
+        assertFalse(shouldNotStartLan.isRunning)
+        assertTrue(coordinator.transportHealth.value.all { !it.running })
         coordinator.close()
         scope.coroutineContext[Job]?.cancel()
     }
