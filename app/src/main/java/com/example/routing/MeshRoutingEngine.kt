@@ -513,18 +513,33 @@ class MeshRoutingEngine(
 
     suspend fun sendRawSignedPacket(packet: MeshPacket): Boolean = dispatchPacket(packet)
 
+    @Synchronized
+    private fun installEphemeralSession(
+        peerId: String,
+        keys: EphemeralSessionHandshake.SessionKeys
+    ) {
+        // A renegotiation must not leave the previous traffic keys reachable in memory.
+        ephemeralSessions.put(peerId, keys)?.let(::clearEphemeralSessionKeys)
+        ephemeralSessionExpiry[peerId] = System.currentTimeMillis() + EPHEMERAL_SESSION_LIFETIME_MS
+    }
+
+    private fun clearEphemeralSessionKeys(keys: EphemeralSessionHandshake.SessionKeys) {
+        keys.sendKey.fill(0)
+        keys.receiveKey.fill(0)
+        keys.transcriptHash.fill(0)
+    }
+
+    @Synchronized
     private fun getActiveEphemeralSession(peerId: String): EphemeralSessionHandshake.SessionKeys? {
-        val expiry = ephemeralSessionExpiry[peerId] ?: return null
+        val keys = ephemeralSessions[peerId] ?: return null
+        val expiry = ephemeralSessionExpiry[peerId] ?: 0L
         if (System.currentTimeMillis() >= expiry) {
+            ephemeralSessions.remove(peerId, keys)
             ephemeralSessionExpiry.remove(peerId)
-            ephemeralSessions.remove(peerId)?.let { keys ->
-                keys.sendKey.fill(0)
-                keys.receiveKey.fill(0)
-                keys.transcriptHash.fill(0)
-            }
+            clearEphemeralSessionKeys(keys)
             return null
         }
-        return ephemeralSessions[peerId]
+        return keys
     }
 
     private suspend fun initiateEphemeralSession(peerId: String): Boolean {
@@ -631,8 +646,7 @@ class MeshRoutingEngine(
                 )
                 val endpoint = activeEndpoints[packet.senderId] ?: return false
                 if (!sendOverBestTransport(endpoint, responsePacket)) return false
-                ephemeralSessions[packet.senderId] = accepted.sessionKeys
-                ephemeralSessionExpiry[packet.senderId] = System.currentTimeMillis() + EPHEMERAL_SESSION_LIFETIME_MS
+                installEphemeralSession(packet.senderId, accepted.sessionKeys)
                 repository.logSecurityEvent(
                     eventType = "EPHEMERAL_SESSION_ESTABLISHED",
                     peerId = packet.senderId,
@@ -654,13 +668,18 @@ class MeshRoutingEngine(
                     )
                 }.getOrNull() ?: return false
                 if (response.responderId != packet.senderId) return false
-                val pending = pendingEphemeralOffers.remove(response.sessionId) ?: return false
-                pendingEphemeralOfferExpiry.remove(response.sessionId)
+                val pending = pendingEphemeralOffers[response.sessionId] ?: return false
+                // Do not consume a valid pending handshake until the responder signature and
+                // transcript binding have both been verified. Invalid responses must not burn it.
                 val keys = runCatching {
                     crypto.finishEphemeralSessionOffer(pending, response, senderSigningKey, ephemeralSessionProtocol)
                 }.getOrNull() ?: return false
-                ephemeralSessions[packet.senderId] = keys
-                ephemeralSessionExpiry[packet.senderId] = System.currentTimeMillis() + EPHEMERAL_SESSION_LIFETIME_MS
+                if (!pendingEphemeralOffers.remove(response.sessionId, pending)) {
+                    clearEphemeralSessionKeys(keys)
+                    return false
+                }
+                pendingEphemeralOfferExpiry.remove(response.sessionId)
+                installEphemeralSession(packet.senderId, keys)
                 repository.logSecurityEvent(
                     eventType = "EPHEMERAL_SESSION_ESTABLISHED",
                     peerId = packet.senderId,
