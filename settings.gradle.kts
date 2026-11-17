@@ -25,5 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "MeshLink"
 
 include(":app")
-include(":mesh-protocol")
 
