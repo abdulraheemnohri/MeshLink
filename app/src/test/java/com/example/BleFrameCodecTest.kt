@@ -56,7 +56,7 @@ class BleFrameCodecTest {
     fun rejectsAggregateChunkBytesBeyondDeclaredTransferLength() {
         val reassembler = BleFrameCodec.Reassembler()
         val oversizedA = frame(transferId = 991, index = 0, count = 2, totalLength = 100, chunk = ByteArray(100) { 1 })
-        val oversizedB = frame(transferId = 991, index = 1, count = 2, totalLength = 100, chunk = ByteArray(100) { 2 })
+        val oversizedB = frame(transferId = 991, index = 1, count = 2, totalLength = 100, chunk = ByteArray(80) { 2 })
 
         assertNull(reassembler.accept(oversizedA))
         assertNull(reassembler.accept(oversizedB))
@@ -73,7 +73,7 @@ class BleFrameCodecTest {
     @Test
     fun reassemblerEvictsOldestIncompleteTransferAtConfiguredLimit() {
         val reassembler = BleFrameCodec.Reassembler(maxTransfers = 1)
-        val first = BleFrameCodec.fragment(ByteArray(100) { 1 }, 64)
+        val first = BleFrameCodec.fragment(ByteArray(80) { 1 }, 64)
         val secondPayload = ByteArray(100) { 2 }
         val second = BleFrameCodec.fragment(secondPayload, 64)
 
