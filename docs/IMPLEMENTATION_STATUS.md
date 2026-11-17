@@ -443,3 +443,13 @@ CI and physical acceptance for these latest changes are pending. Real-device ver
 - Attempt metadata is committed before radio I/O. A process death after the claim therefore retains the backoff window instead of causing an immediate retry storm.
 - Added a Room regression assertion proving the first worker claim succeeds, a stale competing claim is rejected, and a fresh revision can be claimed afterward.
 - This reduces concurrent duplicate sends; it does not make radio delivery exactly-once. A crash after a receiver accepts a packet but before the sender records completion can still cause a later retry, so packet-ID replay suppression and idempotent receive handling remain required.
+
+
+## DTN queue fault isolation (2026-11-17)
+
+- Store-and-forward flush now isolates ordinary per-packet failures so one failed row or transport dispatch does not abort attempts for later queued messages.
+- Coroutine cancellation is rethrown immediately; it is never converted into a packet failure.
+- A claimed attempt remains persisted after a failure, preserving the existing retry backoff and at-least-once delivery semantics.
+- Failure diagnostics are best-effort and do not block the rest of the queue if the diagnostics store is unavailable.
+- CI action references are aligned across both jobs: checkout v6, artifact upload/download v5, and Gradle wrapper validation v6. The Gradle setup action also performs wrapper validation.
+- Android CI success validates compilation and JVM tests only; radio and multi-device acceptance still require physical devices.
