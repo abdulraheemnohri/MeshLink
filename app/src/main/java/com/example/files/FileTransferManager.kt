@@ -137,6 +137,38 @@ class FileTransferManager(
         return transfer
     }
 
+    /** Export through the system document picker; works on Android versions below 10 too. */
+    suspend fun exportVerifiedToUri(transferId: String, destination: Uri): Boolean {
+        val transfer = repository.getFileTransferById(transferId) ?: return false
+        if (transfer.isOutgoing || transfer.status != "VERIFIED") return false
+        val source = File(transfer.localUriOrPath)
+        if (!VerifiedFileIntegrity.matches(source, transfer.totalBytes, transfer.sha256)) {
+            repository.logSecurityEvent(eventType = "EXPORT_HASH_FAIL", peerId = transfer.peerId, severity = "ALERT", summary = "Blocked SAF export because verified file changed on disk: " + transferId)
+            return false
+        }
+        return try {
+            val output = context.contentResolver.openOutputStream(destination, "w")
+                ?: throw java.io.IOException("Document provider did not open destination")
+            var copied = 0L
+            output.use { sink ->
+                source.inputStream().use { input ->
+                    val buffer = ByteArray(32 * 1024)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        sink.write(buffer, 0, count)
+                        copied += count
+                    }
+                }
+            }
+            if (copied != transfer.totalBytes) throw java.io.IOException("Export length mismatch")
+            repository.logNetworkEvent(transportType = transfer.transportType, eventType = "FILE_EXPORT_OK", peerId = transfer.peerId, summary = "Exported verified file " + transfer.fileName + " through SAF")
+            true
+        } catch (error: Exception) {
+            repository.logNetworkEvent(transportType = transfer.transportType, eventType = "FILE_EXPORT_ERR", peerId = transfer.peerId, summary = "SAF export failed for " + transfer.fileName + ": " + error.message)
+            false
+        }
+    }
     /** Export a received file only after re-checking its persisted size and SHA-256. */
     suspend fun exportVerifiedDownload(transferId: String): Uri? {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return null
