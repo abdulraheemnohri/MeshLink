@@ -79,8 +79,8 @@ jobs:
           test -s "$APK"
           {
             echo "applicationId=com.aistudio.meshlink.rx7kqm"
-            echo "versionName=1.0"
-            echo "versionCode=1"
+            echo "versionName=1.1"
+            echo "versionCode=2"
             echo "buildType=debug"
             echo "signingMode=$SIGNING_MODE"
             echo "commit=$SOURCE_SHA"
