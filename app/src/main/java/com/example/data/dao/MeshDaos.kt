@@ -10,6 +10,7 @@ import com.example.data.entities.FileChunkEntity
 import com.example.data.entities.FileTransferEntity
 import com.example.data.entities.GroupEntity
 import com.example.data.entities.GroupMemberEntity
+import com.example.data.entities.GroupKeyUpdateEntity
 import com.example.data.entities.MessageEntity
 import com.example.data.entities.NetworkEventEntity
 import com.example.data.entities.PendingPacketEntity
@@ -79,6 +80,18 @@ interface GroupDao {
 
     @Query("UPDATE group_members SET role = :role WHERE groupId = :groupId AND peerId = :peerId")
     suspend fun updateMemberRole(groupId: String, peerId: String, role: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertKeyUpdate(update: GroupKeyUpdateEntity)
+
+    @Query("SELECT * FROM group_key_updates WHERE packetId = :packetId LIMIT 1")
+    suspend fun getKeyUpdateByPacketId(packetId: String): GroupKeyUpdateEntity?
+
+    @Query("UPDATE group_key_updates SET status = :status, updatedAt = :now, acknowledgedAt = :acknowledgedAt WHERE packetId = :packetId")
+    suspend fun updateKeyUpdateStatus(packetId: String, status: String, now: Long, acknowledgedAt: Long?)
+
+    @Query("SELECT COUNT(*) FROM group_key_updates WHERE groupId = :groupId AND status != 'ACKED'")
+    suspend fun countUnacknowledgedKeyUpdates(groupId: String): Int
 }
 
 @Dao
