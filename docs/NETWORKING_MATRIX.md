@@ -14,7 +14,7 @@ This document separates transports that are implemented in the current Android s
 | Wi-Fi Aware (NAN) | Nearby discovery/data path without joining a conventional WLAN | Dedicated adapter exists on Android 8+ devices that expose Wi-Fi Aware; hardware/carrier/OEM support varies |
 | Bluetooth LE | Low-power discovery and GATT data | Dedicated adapter exists; throughput is limited and transfers are fragmented |
 | NFC | Tap to exchange a small bootstrap payload / peer identity URI | Manifest permission and intent filter exist; this is not a general message/file transport and an end-to-end NDEF exchange adapter is not yet verified |
-| QR code | Optical, one-way-at-a-time exchange of identity/bootstrap data | Identity URI encoding/import exists; QR is not a continuous network transport |
+| QR code | Optical, one-way-at-a-time exchange of identity/bootstrap data | Identity QR display, manual URI import and offline CameraX/ZXing camera scanner are implemented; scanner still needs physical-device validation; QR is not a continuous network transport |
 | Bluetooth Classic RFCOMM | Paired-device serial data channel | Registered RFCOMM adapter with signed identity HELLO and challenge-response connect path; requires system pairing and physical two-device validation |
 | Android Nearby Connections | Google Play services nearby peer-to-peer API | Not currently integrated. It can use Bluetooth, BLE and Wi-Fi under the hood; requires Play services and is not an independent radio |
 | USB / Ethernet / USB tethering | Local IP network over a cable or adapter | Can work through Local LAN if Android exposes a supported private interface; no dedicated USB transport |
