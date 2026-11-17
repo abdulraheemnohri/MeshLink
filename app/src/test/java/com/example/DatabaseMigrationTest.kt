@@ -62,6 +62,7 @@ class DatabaseMigrationTest {
             AppDatabase.MIGRATION_5_6.migrate(db)
             AppDatabase.MIGRATION_6_7.migrate(db)
             AppDatabase.MIGRATION_7_8.migrate(db)
+            AppDatabase.MIGRATION_8_9.migrate(db)
 
             assertColumns(
                 db,
@@ -113,11 +114,25 @@ class DatabaseMigrationTest {
                 assertEquals("p0", cursor.getString(0))
             }
 
+            assertColumns(
+                db,
+                "group_role_updates",
+                setOf(
+                    "packetId", "groupId", "epoch", "peerId", "targetPeerId",
+                    "role", "issuedAt", "status", "updatedAt", "acknowledgedAt"
+                )
+            )
             db.query(
                 "SELECT name FROM sqlite_master WHERE type = 'index' " +
                     "AND name = 'index_group_key_updates_groupId'"
             ).use { cursor ->
                 assertTrue("The group key update lookup index must exist", cursor.moveToFirst())
+            }
+            db.query(
+                "SELECT name FROM sqlite_master WHERE type = 'index' " +
+                    "AND name = 'index_group_role_updates_peerId'"
+            ).use { cursor ->
+                assertTrue("The group role recipient lookup index must exist", cursor.moveToFirst())
             }
         } finally {
             helper.close()
