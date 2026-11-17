@@ -109,3 +109,10 @@ The current application ID remains `com.aistudio.meshlink.rx7kqm` to avoid silen
 ## Scope note
 
 This audit does not claim that every possible radio or network type is a native Android transport. Cellular/internet/satellite require explicit gateways; LoRa/Zigbee/Thread/HaLow require external radio hardware. QR and NFC are bootstrap channels, not mesh data links. Nearby Connections is not currently integrated.
+
+
+## QR scanner reliability
+
+The offline QR scanner now reports camera provider/startup/binding failures in the dialog and offers a retry action. The retry path recreates its image-analysis executor rather than attempting to reuse a shut-down executor. This is source-level implementation; camera behavior must still be validated on physical devices.
+
+See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for high-priority open protocol risks, including group invitation QR key exposure and the current long-lived ECDH key schedule. These are documented as release blockers, not presented as solved.
