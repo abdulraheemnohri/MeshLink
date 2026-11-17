@@ -22,6 +22,7 @@ import com.example.ui.screens.IdentityScreen
 import com.example.ui.screens.LocationScreen
 import com.example.ui.screens.LockScreen
 import com.example.ui.screens.NetworkBridgeScreen
+import com.example.ui.screens.NetworkControlCenterScreen
 import com.example.ui.screens.NetworkMapScreen
 import com.example.ui.screens.PrivateChatScreen
 import com.example.ui.screens.ProfileScreen
@@ -113,6 +114,24 @@ fun NavigationGraph(
                 onScanNow = { viewModel.triggerDiscoveryScan() },
                 onToggleEmergency = { viewModel.triggerEmergencyModeBroadcast() },
                 onNavigate = onNavigateTopLevel
+            )
+        }
+
+        composable(MeshRoute.NETWORK_CONTROL) {
+            NetworkControlCenterScreen(
+                connections = connections,
+                transportHealth = transportHealth,
+                pendingPackets = pendingPackets,
+                networkEvents = networkEvents,
+                isRelayRunning = isRelayRunning,
+                onToggleRelay = { enabled ->
+                    viewModel.updateSettings { it.copy(backgroundRelayEnabled = enabled) }
+                    if (enabled) viewModel.startRelayService() else viewModel.stopRelayService()
+                },
+                onScanNow = { viewModel.triggerDiscoveryScan() },
+                onOpenConnections = { onNavigateTopLevel(MeshRoute.CONNECTIONS) },
+                onOpenTopology = { onNavigateTopLevel(MeshRoute.NETWORK_MAP) },
+                onOpenDiagnostics = { onNavigateTopLevel(MeshRoute.DIAGNOSTICS) }
             )
         }
 
