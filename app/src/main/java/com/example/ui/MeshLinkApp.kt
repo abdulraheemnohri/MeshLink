@@ -1,5 +1,8 @@
 package com.example.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -168,7 +171,8 @@ fun MeshLinkApp(viewModel: MeshViewModel) {
             Row(modifier = Modifier.fillMaxSize()) {
                 if (useRail && currentRoute != MeshRoute.LOCK) {
                     NavigationRail(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ) {
                         Spacer(Modifier.height(16.dp))
                         topTabs.forEachIndexed { idx, item ->
@@ -177,9 +181,19 @@ fun MeshLinkApp(viewModel: MeshViewModel) {
                                 selected = selected,
                                 onClick = { navigateTopLevel(item.route) },
                                 icon = {
+                                    val iconScale = animateFloatAsState(
+                                        targetValue = if (selected) 1.12f else 1f,
+                                        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
+                                        label = "navigation_icon_scale"
+                                    )
                                     Icon(
                                         imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
-                                        contentDescription = item.label
+                                        contentDescription = item.label,
+                                        modifier = Modifier.graphicsLayer {
+                                            scaleX = iconScale.value
+                                            scaleY = iconScale.value
+                                        },
+                                        tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
                                 label = { Text(item.label) },
@@ -190,6 +204,7 @@ fun MeshLinkApp(viewModel: MeshViewModel) {
                 }
 
                 Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
                     contentWindowInsets = WindowInsets.safeDrawing,
                     snackbarHost = { SnackbarHost(snackbarHostState) },
                     topBar = {
@@ -227,7 +242,8 @@ fun MeshLinkApp(viewModel: MeshViewModel) {
                                         }
                                     },
                                     colors = TopAppBarDefaults.topAppBarColors(
-                                        containerColor = MaterialTheme.colorScheme.background
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        titleContentColor = MaterialTheme.colorScheme.onSurface
                                     )
                                 )
 
@@ -242,7 +258,8 @@ fun MeshLinkApp(viewModel: MeshViewModel) {
                                 ScrollableTabRow(
                                     selectedTabIndex = selectedIdx,
                                     edgePadding = 12.dp,
-                                    containerColor = MaterialTheme.colorScheme.background
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = MaterialTheme.colorScheme.onSurface
                                 ) {
                                     subRoutes.forEachIndexed { i, (route, label) ->
                                         Tab(
@@ -259,7 +276,11 @@ fun MeshLinkApp(viewModel: MeshViewModel) {
                 },
                     bottomBar = {
                         if (!useRail && !isDetailScreen) {
-                            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                            NavigationBar(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                tonalElevation = 8.dp
+                            ) {
                                 topTabs.forEachIndexed { idx, item ->
                                     val selected = activeHubIndex == idx
                                     NavigationBarItem(
