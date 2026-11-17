@@ -182,14 +182,6 @@ class MeshRepository(
     }
 
     suspend fun importVerifiedPeer(payload: PeerIdentityPayload): PeerEntity {
-        val computedFingerprint = crypto.computeFingerprint(
-            payload.signingPublicKeyB64,
-            payload.agreementPublicKeyB64
-        )
-        val expectedDeviceId = computedFingerprint.replace(":", "").take(16).lowercase()
-        require(payload.fingerprint == computedFingerprint && payload.deviceId == expectedDeviceId) {
-            "Peer identity fingerprint or device ID does not match its public keys"
-        }
         val existing = peerDao.getPeerById(payload.deviceId)
         if (existing != null &&
             (existing.fingerprint != payload.fingerprint ||
@@ -200,11 +192,19 @@ class MeshRepository(
                 eventType = "PEER_IDENTITY_KEY_CHANGED",
                 peerId = payload.deviceId,
                 severity = "CRITICAL",
-                summary = "Rejected QR identity update because stored and received fingerprints differ"
+                summary = "Rejected QR identity update because stored and received public keys differ"
             )
             throw PeerIdentityKeyChangedException(
                 payload.deviceId, existing.fingerprint, payload.fingerprint
             )
+        }
+        val computedFingerprint = crypto.computeFingerprint(
+            payload.signingPublicKeyB64,
+            payload.agreementPublicKeyB64
+        )
+        val expectedDeviceId = computedFingerprint.replace(":", "").take(16).lowercase()
+        require(payload.fingerprint == computedFingerprint && payload.deviceId == expectedDeviceId) {
+            "Peer identity fingerprint or device ID does not match its public keys"
         }
         val entity = PeerEntity(
             deviceId = payload.deviceId,
