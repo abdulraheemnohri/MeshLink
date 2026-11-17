@@ -54,6 +54,17 @@ class MeshRelayService : Service() {
             stopping = false
             startupJob = serviceScope.launch {
                 val startup = RelayTaskGuard.run {
+                    // A process may have died without onDestroy running. Treat all
+                    // persisted radio states as stale, but keep the durable DTN outbox.
+                    val expiredOnRecovery = container.repository.purgeExpiredCache()
+                    container.repository.markAllDisconnected()
+                    val queuedOnRecovery = container.repository.getActivePendingPackets().size
+                    container.repository.logNetworkEvent(
+                        transportType = "RELAY",
+                        eventType = "PROCESS_RECOVERY",
+                        summary = "Relay recovery reconciled stale connections; retained $queuedOnRecovery unexpired queued packet(s) and purged $expiredOnRecovery expired cache record(s)"
+                    )
+
                     val settings = container.repository.getSettingsOnce()
                     container.repository.ensureInitialized()
 
@@ -150,7 +161,7 @@ class MeshRelayService : Service() {
                 withTimeoutOrNull(CLEANUP_TIMEOUT_MS) {
                     stopTransports(container)
                     container.isRelayRunning.value = false
-                    runCatching { container.repository.markAllDisconnected() }
+                    RelayTaskGuard.run { container.repository.markAllDisconnected() }
                 }
                 cleanupScope.cancel()
             }
