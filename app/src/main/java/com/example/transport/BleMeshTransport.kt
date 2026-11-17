@@ -32,6 +32,7 @@ import com.example.core.protocol.MeshPacket
 import com.example.core.protocol.MeshPacketCodec
 import com.example.core.protocol.BleFrameCodec
 import com.example.core.protocol.TransportType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -174,11 +175,8 @@ class BleMeshTransport(
         isRunning = false
         incomingFrames.clear()
         discoveredDevices.clear()
-        if (!HardwareCapabilities.hasBluetoothPermissions(context)) {
-            runCatching { gattServer?.close() }
-            gattServer = null
-            return
-        }
+        // Release every framework resource even when permissions were revoked.
+        // A failure stopping one radio component must not leak the others.
         runCatching { scanner?.stopScan(scanCallback) }
         runCatching { advertiser?.stopAdvertising(advertiseCallback) }
         runCatching { gattServer?.close() }
@@ -288,9 +286,16 @@ class BleMeshTransport(
             }
         })
 
-        val delivered = withTimeoutOrNull(180_000L) { resultDeferred.await() } ?: false
-        runCatching { gatt?.close() }
-        return delivered
+        try {
+            withTimeoutOrNull(180_000L) { resultDeferred.await() } ?: false
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } finally {
+            if (!resultDeferred.isCompleted) resultDeferred.complete(false)
+            // Disconnect before close; guard both calls against permission/radio loss.
+            runCatching { gatt?.disconnect() }
+            runCatching { gatt?.close() }
+        }
     }
 
     @SuppressLint("MissingPermission")
