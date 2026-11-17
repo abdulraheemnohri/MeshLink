@@ -423,3 +423,14 @@ CI and physical acceptance for these latest changes are pending. Real-device ver
 - Explicit stop now waits for startup and maintenance jobs to cancel before shutting down radios and marking connections disconnected.
 - Existing pending packet schema already contained attemptCount and lastAttemptAt, so this change requires no Room schema migration.
 - Remaining verification: CI unit tests/build, process-kill/relaunch test with a pending packet, and physical multi-hop A→B→C recovery. Backoff controls retry pressure; it does not prove delivery or guarantee Android will restart a killed service.
+
+
+## Relay process-death recovery (2026-11-17)
+
+- Relay startup now reconciles persisted peer and connection rows before enabling radios. Peers are marked disconnected and active CONNECTED / HANDSHAKING connection-history rows are closed with a recovery timestamp; stale live-state is never presented as an active connection after process death.
+- The Room transaction updates peer and connection state together. Durable pending DTN packets are retained, while expired packets/messages and stale routes are purged through the existing expiry policy.
+- Startup records a PROCESS_RECOVERY network event with the retained unexpired queue count and purge count, then starts the enabled transports. Reconnection events and the existing maintenance loop resume queue delivery.
+- Added a Room/Robolectric regression test for stale connected/handshaking rows while preserving already-closed history.
+- Existing PendingPacketRetryPolicy and DAO tests already cover persisted attempt counters, timestamps, exponential backoff, clock rollback, and retry boundaries; no duplicate retry policy was introduced.
+- Delivery remains at-least-once across a crash between radio send and local ACK persistence. Receivers must retain duplicate suppression/idempotent handling; this is not a claim of exactly-once delivery.
+- Remaining validation: Android CI; kill the app process with queued packets, relaunch and confirm the outbox survives; reconnect two physical devices and confirm eventual ACK/removal; verify no stale connected UI state before rediscovery.
