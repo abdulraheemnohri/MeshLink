@@ -399,6 +399,11 @@ class MeshRepository(
     }
 
     suspend fun addGroupMember(groupId: String, peer: PeerEntity) {
+        val local = ensureInitialized()
+        require(groupDao.getMember(groupId, local.deviceId)?.role == "ADMIN") {
+            "Only a group admin can add members"
+        }
+        require(peer.verifiedByQr && !peer.blocked) { "Peer must be trusted and unblocked before invitation" }
         groupDao.upsertMember(
             GroupMemberEntity(
                 groupId = groupId,
@@ -410,14 +415,35 @@ class MeshRepository(
     }
 
     suspend fun removeGroupMember(groupId: String, peerId: String) {
+        val local = ensureInitialized()
+        require(groupDao.getMember(groupId, local.deviceId)?.role == "ADMIN") {
+            "Only a group admin can remove members"
+        }
+        require(peerId != local.deviceId) { "The local admin cannot remove itself" }
         groupDao.removeMember(groupId, peerId)
     }
 
     suspend fun updateGroupMemberRole(groupId: String, peerId: String, role: String) {
+        val local = ensureInitialized()
+        require(groupDao.getMember(groupId, local.deviceId)?.role == "ADMIN") {
+            "Only a group admin can update member roles"
+        }
+        require(role == "ADMIN" || role == "MEMBER") { "Invalid group role" }
+        require(peerId != local.deviceId || role == "ADMIN") { "The local admin cannot demote itself" }
         groupDao.updateMemberRole(groupId, peerId, role)
+        logSecurityEvent(
+            eventType = "GROUP_ROLE_CHANGED_LOCAL",
+            peerId = peerId,
+            severity = "WARN",
+            summary = "Changed group role locally only; role replication is not implemented"
+        )
     }
 
     suspend fun rotateGroupKey(groupId: String) {
+        val local = ensureInitialized()
+        require(groupDao.getMember(groupId, local.deviceId)?.role == "ADMIN") {
+            "Only a group admin can rotate the group key"
+        }
         val existing = groupDao.getGroupById(groupId) ?: return
         groupDao.upsertGroup(
             existing.copy(
