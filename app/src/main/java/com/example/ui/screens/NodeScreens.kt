@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -826,6 +827,8 @@ fun SettingsScreen(
 ) {
     var emergencyDraft by remember(settings.emergencyMessage) { mutableStateOf(settings.emergencyMessage) }
     var permissionRefresh by remember { mutableStateOf(0) }
+    var settingsSearch by remember { mutableStateOf("") }
+    var settingsCategory by remember { mutableStateOf("ALL") }
     val settingsListState = rememberLazyListState()
     val settingsScope = rememberCoroutineScope()
     val jumpToSection: (Int) -> Unit = { index ->
@@ -883,6 +886,56 @@ fun SettingsScreen(
                         )
                     }
                     Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = settingsSearch,
+                        onValueChange = { settingsSearch = it.take(80) },
+                        modifier = Modifier.fillMaxWidth().testTag("settings_search"),
+                        singleLine = true,
+                        label = { Text("Search settings") },
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search settings") },
+                        placeholder = { Text("Security, permissions, radios, routing…") }
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf("ALL", "SECURITY", "DEVICE", "NETWORK", "ROUTING").forEach { category ->
+                            FilterChip(
+                                selected = settingsCategory == category,
+                                onClick = { settingsCategory = category },
+                                label = { Text(category.lowercase().replaceFirstChar { it.uppercase() }) },
+                                modifier = Modifier.testTag("settings_category_$category")
+                            )
+                        }
+                    }
+                    val settingsTargets = listOf(
+                        Triple("Security & biometric", "SECURITY", 1),
+                        Triple("Appearance & theme", "DEVICE", 2),
+                        Triple("Android permissions", "DEVICE", 3),
+                        Triple("Radio adapters", "NETWORK", 4),
+                        Triple("Routing strategy", "ROUTING", 5),
+                        Triple("Transport policy", "NETWORK", 6)
+                    )
+                    val matchingTargets = settingsTargets.filter { target ->
+                        (settingsCategory == "ALL" || target.second == settingsCategory) &&
+                            (settingsSearch.isBlank() || target.first.contains(settingsSearch, ignoreCase = true) ||
+                                target.second.contains(settingsSearch, ignoreCase = true))
+                    }
+                    if (settingsSearch.isNotBlank() || settingsCategory != "ALL") {
+                        if (matchingTargets.isEmpty()) {
+                            Text("No matching settings sections", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            matchingTargets.forEach { target ->
+                                TextButton(
+                                    onClick = { jumpToSection(target.third) },
+                                    modifier = Modifier.fillMaxWidth().testTag("settings_result_${target.second}_${target.third}")
+                                ) {
+                                    Text(target.first, modifier = Modifier.weight(1f))
+                                    Text("Open")
+                                }
+                            }
+                        }
+                    }
                     Text("Jump to settings", style = MaterialTheme.typography.titleSmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(
