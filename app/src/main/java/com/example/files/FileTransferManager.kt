@@ -202,8 +202,14 @@ class FileTransferManager(
             repository.upsertFileTransfer(transfer.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
             return
         }
-        if (peer.agreementPublicKey.isBlank()) {
+        if (!peer.verifiedByQr || peer.blocked || peer.signingPublicKey.isBlank() || peer.agreementPublicKey.isBlank()) {
             repository.upsertFileTransfer(transfer.copy(status = "PAUSED", updatedAt = System.currentTimeMillis()))
+            repository.logSecurityEvent(
+                eventType = "FILE_SESSION_TRUST_REQUIRED",
+                peerId = transfer.peerId,
+                severity = "WARN",
+                summary = "Paused file transfer because the destination is not QR-verified or is blocked"
+            )
             return
         }
         val completeAck = CompletableDeferred<Boolean>()
