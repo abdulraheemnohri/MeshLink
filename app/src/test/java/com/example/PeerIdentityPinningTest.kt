@@ -54,8 +54,10 @@ class PeerIdentityPinningTest {
         assertFalse(imported.verifiedByQr)
 
         db.peerDao().setVerified(original.deviceId, true)
+        db.peerDao().setBlocked(original.deviceId, true)
         val sameIdentity = repository.importVerifiedPeer(original)
         assertTrue(sameIdentity.verifiedByQr)
+        assertTrue(sameIdentity.blocked)
 
         val changed = original.copy(
             signingPublicKeyB64 = "attacker-signing-key",
@@ -70,5 +72,6 @@ class PeerIdentityPinningTest {
         assertEquals("FP-A", stored.fingerprint)
         assertEquals("signing-key-a", stored.signingPublicKey)
         assertTrue(stored.verifiedByQr)
+        assertTrue(stored.blocked)
     }
 }
