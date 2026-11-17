@@ -1092,7 +1092,9 @@ class MeshRoutingEngine(
             )
             return true
         }
-        val directEndpoint = activeEndpoints[packet.destinationId]
+        val directEndpoint = activeEndpoints[packet.destinationId]?.takeIf {
+            MeshForwardingPolicy.canForwardToNextHop(packet, it.deviceId)
+        }
 
         if (directEndpoint != null) {
             val sent = sendOverBestTransport(directEndpoint, packet)
@@ -1112,7 +1114,7 @@ class MeshRoutingEngine(
         val route = repository.getBestRoute(packet.destinationId)
         if (route != null) {
             val nextHop = activeEndpoints[route.nextHopId]
-            if (nextHop != null && !packet.visitedPeers.contains(nextHop.deviceId)) {
+            if (nextHop != null && MeshForwardingPolicy.canForwardToNextHop(packet, nextHop.deviceId)) {
                 val sent = sendOverBestTransport(nextHop, packet)
                 if (sent) {
                     repository.recordRelayOutcome(nextHop.deviceId, true)
@@ -1341,6 +1343,15 @@ class MeshRoutingEngine(
         // Replay & duplicate suppression. Expired entries are pruned and the cache is bounded.
         val now = System.currentTimeMillis()
         if (packet.isExpired(now)) return
+        if (local.deviceId in packet.visitedPeers) {
+            repository.logSecurityEvent(
+                eventType = "ROUTE_LOOP_DROP",
+                peerId = packet.senderId,
+                severity = "WARN",
+                summary = "Dropped packet ${packet.messageId.take(8)} because this node is already in its visited path"
+            )
+            return
+        }
         if (packetReplayStore.contains(packet.messageId, now)) {
             repository.logSecurityEvent(
                 eventType = "REPLAY_DROP",
@@ -1474,21 +1485,18 @@ class MeshRoutingEngine(
         // Network Bridge cross-cluster forwarding
         bridgePacketIfConfigured(packet, transportType, senderPeer?.verifiedByQr == true)
 
-        // Multi-hop relay forwarding without reading plaintext payload
-        val shouldRelay = packet.destinationId != local.deviceId && packet.hopLimit > 1
-        if (shouldRelay) {
-            val forwarded = packet.copy(
-                hopLimit = packet.hopLimit - 1,
-                hopCount = packet.hopCount + 1,
-                visitedPeers = packet.visitedPeers + local.deviceId
-            )
-            dispatchPacket(forwarded)
-            repository.logNetworkEvent(
-                transportType = transportType.name,
-                eventType = "RELAY_FWD",
-                peerId = packet.destinationId,
-                summary = "Relayed encrypted ${packet.packetType.name} (${forwarded.hopCount} hops, TTL=${forwarded.hopLimit})"
-            )
+        // Multi-hop relay forwarding without reading plaintext payload.
+        val forwarded = MeshForwardingPolicy.forwardForRelay(packet, local.deviceId)
+        if (forwarded != null) {
+            val sentOrQueued = dispatchPacket(forwarded)
+            if (sentOrQueued) {
+                repository.logNetworkEvent(
+                    transportType = transportType.name,
+                    eventType = "RELAY_FWD",
+                    peerId = packet.destinationId,
+                    summary = "Forwarded encrypted ${packet.packetType.name} (${forwarded.hopCount} hops, TTL=${forwarded.hopLimit})"
+                )
+            }
         }
     }
 
