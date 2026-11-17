@@ -133,15 +133,15 @@ class NearbyConnectionsMeshTransport(
             log("STARTED", "Nearby Connections advertising and discovery active")
         } catch (error: Exception) {
             isRunning = false
-            runCatching { awaitCompletion(client.stopDiscovery()) }
-            runCatching { awaitCompletion(client.stopAdvertising()) }
+            runCatching { client.stopDiscovery() }
+            runCatching { client.stopAdvertising() }
             throw error
         }
     }
 
     override suspend fun triggerDiscovery() {
         check(isRunning) { "Nearby Connections is not running" }
-        awaitCompletion(client.stopDiscovery())
+        client.stopDiscovery()
         awaitCompletion(client.startDiscovery(SERVICE_ID, discovery, DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()))
     }
 
@@ -174,7 +174,7 @@ class NearbyConnectionsMeshTransport(
     override suspend fun stop() = withContext(Dispatchers.IO) {
         isRunning = false
         runCatching { awaitCompletion(client.stopAdvertising()) }
-        runCatching { client.stopDiscovery().await() }
+        runCatching { client.stopDiscovery() }
         runCatching { client.stopAllEndpoints() }
         waiters.values.forEach { it.complete(false) }
         waiters.clear(); requested.clear(); authenticated.clear(); identities.clear()
