@@ -120,6 +120,18 @@ class MeshCryptoEngine(private val context: Context) {
         return hash.take(16).joinToString(":") { "%02X".format(it) }
     }
 
+    fun areValidIdentityPublicKeys(signPubB64: String, kxPubB64: String): Boolean = runCatching {
+        val keyFactory = KeyFactory.getInstance("EC")
+        val signing = keyFactory.generatePublic(
+            X509EncodedKeySpec(Base64.decode(signPubB64, Base64.NO_WRAP))
+        ) as? java.security.interfaces.ECPublicKey ?: return false
+        val agreement = keyFactory.generatePublic(
+            X509EncodedKeySpec(Base64.decode(kxPubB64, Base64.NO_WRAP))
+        ) as? java.security.interfaces.ECPublicKey ?: return false
+        signing.params.curve.field.fieldSize == 256 &&
+            agreement.params.curve.field.fieldSize == 256
+    }.getOrDefault(false)
+
     fun signPacket(packet: MeshPacket): MeshPacket {
         val identity = ensureLocalIdentity()
         val priv = signingKeyPair?.private
