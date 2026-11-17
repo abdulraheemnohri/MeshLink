@@ -114,6 +114,14 @@ jobs:
       - name: Run unit tests
         run: ./gradlew --no-daemon --stacktrace testDebugUnitTest
 
+      - name: Verify Room schema export
+        run: |
+          find app/schemas -maxdepth 4 -type f -print
+          test -n "$(find app/schemas -type f -name '9.json' -print -quit)" || {
+            echo "::error::Room schema version 9 JSON was not generated."
+            exit 1
+          }
+
       - name: Write APK build information
         env:
           SIGNING_MODE: ${{ steps.debug-signing.outputs.mode }}
@@ -140,6 +148,6 @@ jobs:
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/debug/build-info.txt
-            app/schemas/**/*.json
+            app/schemas/
           if-no-files-found: error
           retention-days: 14
