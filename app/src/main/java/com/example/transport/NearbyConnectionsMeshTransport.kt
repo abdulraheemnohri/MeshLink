@@ -173,7 +173,7 @@ class NearbyConnectionsMeshTransport(
 
     override suspend fun stop() = withContext(Dispatchers.IO) {
         isRunning = false
-        runCatching { awaitCompletion(client.stopAdvertising()) }
+        runCatching { client.stopAdvertising() }
         runCatching { client.stopDiscovery() }
         runCatching { client.stopAllEndpoints() }
         waiters.values.forEach { it.complete(false) }
