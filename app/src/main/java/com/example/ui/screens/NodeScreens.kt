@@ -666,6 +666,7 @@ fun DiagnosticsScreen(
     }
     val context = LocalContext.current
     var exportStatus by remember { mutableStateOf<String?>(null) }
+    var exportPayload by remember { mutableStateOf("") }
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
     ) { destination ->
@@ -681,7 +682,6 @@ fun DiagnosticsScreen(
             }
         }
     }
-    var exportPayload by remember { mutableStateOf("") }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { onRefreshCapabilities() }
