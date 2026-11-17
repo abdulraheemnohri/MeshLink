@@ -175,9 +175,14 @@ private fun QrCameraPreview(
                                     image.height,
                                     false
                                 )
-                                val decoded = runCatching {
+                                val decoded = try {
                                     reader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
-                                }.getOrNull()
+                                } catch (_: Exception) {
+                                    null
+                                } finally {
+                                    // ZXing readers retain decode state; reset before the next camera frame.
+                                    reader.reset()
+                                }
                                 if (active.get() && !decoded.isNullOrBlank() && delivered.compareAndSet(false, true)) {
                                     mainExecutor.execute { if (active.get()) onResult(decoded) }
                                 }
@@ -204,7 +209,10 @@ private fun QrCameraPreview(
         providerFuture.addListener(listener, mainExecutor)
         onDispose {
             active.set(false)
-            runCatching { providerFuture.get().unbindAll() }
+            // Never block the main thread waiting for CameraX initialization during disposal.
+            if (providerFuture.isDone) {
+                runCatching { providerFuture.get().unbindAll() }
+            }
             executor.shutdown()
         }
     }
