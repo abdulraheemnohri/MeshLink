@@ -469,3 +469,14 @@ CI and physical acceptance for these latest changes are pending. Real-device ver
 - The GATT callback now resolves the remote address under a permission-revocation guard and reuses that value for cleanup, reassembly and packet events. A revoked Bluetooth Connect permission causes the callback to drop the event safely.
 - Added a codec regression test proving the configured in-flight transfer limit evicts an older incomplete transfer while allowing the newer transfer to complete.
 - This bounds application-level reassembly memory; it does not authenticate the BLE link by itself. MeshLink's packet/session verification remains responsible for peer authenticity.
+
+
+## Multi-transport lifecycle and cancellation hardening (2026-11-17)
+
+- BLE stop now attempts scanner, advertiser and GATT-server cleanup independently even when Nearby Devices permission has been revoked. A failed cleanup call no longer skips later resource releases.
+- BLE GATT packet sends now disconnect and close their client GATT in a finally block on success, timeout, failure or coroutine cancellation. Pending callbacks are completed as failed during teardown so a timed-out send cannot remain logically active.
+- Wi-Fi Aware removes each pending send deferred in a finally block, covering successful delivery, callback failure, timeout, transport stop and caller cancellation.
+- Nearby Connections connect waiters now use put-if-absent so concurrent callers share one connection attempt instead of replacing each other's completion signal. A timed-out or cancelled owner removes its waiter and disconnects the unfinished endpoint.
+- Nearby application sends and handshake sends now rethrow coroutine cancellation rather than reporting cancellation as a normal radio failure.
+- Wi-Fi Direct socket sends now preserve coroutine cancellation while still logging ordinary socket failures.
+- Automated Android CI is required to validate compilation and JVM tests. Device-level reconnection, permission-revocation and radio-toggle acceptance remain outstanding.
