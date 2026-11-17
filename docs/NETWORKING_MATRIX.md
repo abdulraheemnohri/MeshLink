@@ -140,7 +140,7 @@ Google Nearby Connections remains a separate optional Play-services transport an
 
 ## Bluetooth Classic identity safety gate
 
-RFCOMM bonded-device discovery currently yields an Android Bluetooth address, not a MeshLink cryptographic identity. The routing event handler now refuses to register a Bluetooth Classic endpoint as a MeshLink peer while its signing and agreement public keys are empty. It records an `IDENTITY_PENDING` event instead. This prevents a bonded phone's MAC-derived identifier from becoming a trusted peer or route. Full RFCOMM messaging remains gated until an authenticated MeshLink identity handshake binds the remote public keys to the socket.
+RFCOMM bonded-device discovery currently yields an Android Bluetooth address, not a MeshLink cryptographic identity. The routing event handler now refuses to register a Bluetooth Classic endpoint as a MeshLink peer while its signing and agreement public keys are empty. It records an `IDENTITY_PENDING` event instead. This prevents a bonded phone's MAC-derived identifier from becoming a trusted peer or route. The adapter now binds the signed identity HELLO to the RFCOMM socket and exposes an authenticated connect result after challenge-response; physical interoperability, reconnect and bidirectional packet delivery still require two-device acceptance testing.
 
 
 ## RFCOMM signed identity handshake
