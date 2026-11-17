@@ -1308,7 +1308,7 @@ class MeshRoutingEngine(
                 val baseEmergencyId = ackId.substringBefore("_")
                 repository.updateMessageStatus(ackId, "DELIVERED", System.currentTimeMillis(), packet.hopCount)
                 repository.removePendingPacket(ackId)
-                repository.markGroupKeyUpdateAcknowledged(ackId)
+                repository.markGroupKeyUpdateAcknowledged(ackId, packet.senderId)
                 val ackAlias = senderPeer?.alias ?: packet.senderId
                 repository.recordEmergencyAck(baseEmergencyId, packet.senderId, ackAlias)
                 repository.logNetworkEvent(
