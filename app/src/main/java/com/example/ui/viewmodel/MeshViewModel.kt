@@ -354,10 +354,13 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         viewModelScope.launch {
             val group = repository.createGroup(name, description, category, members)
+            var queued = 0
             members.forEach { peer ->
-                routingEngine.sendGroupInvite(group.groupId, peer.deviceId)
+                if (routingEngine.sendGroupInvite(group.groupId, peer.deviceId)) queued++
             }
-            _snackMessages.tryEmit("Created $category group '${group.name}' & invited ${members.size} peer(s)")
+            _snackMessages.tryEmit(
+                "Created $category group '${group.name}'. Secure invitations queued/sent to $queued of ${members.size} selected peers; unverified peers must be fingerprint-verified first."
+            )
         }
     }
 
@@ -383,7 +386,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val sent = routingEngine.sendGroupInvite(groupId, peer.deviceId)
             _snackMessages.tryEmit(
-                if (sent) "Sent E2EE group invite to ${peer.alias}" else "Added ${peer.alias} & queued invite"
+                if (sent) "Encrypted group invitation queued/sent to ${peer.alias}"
+                else "Invitation not sent. Verify the peer fingerprint, check group admin rights and confirm a valid peer key."
             )
         }
     }
