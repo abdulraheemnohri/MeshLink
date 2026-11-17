@@ -12,6 +12,7 @@ enum class PacketType {
     MESSAGE,
     GROUP_MESSAGE,
     GROUP_INVITE,
+    GROUP_KEY_UPDATE,
     FILE_OFFER,
     FILE_CHUNK,
     DELIVERY_ACK,
