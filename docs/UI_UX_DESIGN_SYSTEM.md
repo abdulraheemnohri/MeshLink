@@ -16,6 +16,8 @@ MeshLink uses a dark-first, technical interface: obsidian surfaces, restrained c
 - Profile screen has a dedicated local-profile hero, clearer editable fields, privacy grouping and an explicit local-storage explanation.
 - Top app bar, navigation rail and bottom navigation use consistent surface colors and selected-state icon motion.
 - Existing controls, route names, callbacks, test tags and data models are preserved.
+- Private and group chat composers follow the Android keyboard inset, cap drafts at 4,000 characters, show a live character count and disable sending when the draft is blank or the conversation target is unavailable.
+- Chat timelines animate to the newest message when the message count changes; message bubbles use a subtle directional corner, outline and content-size transition.
 
 ## UX and accessibility guardrails
 - Motion is short and functional; avoid continuous animation for static/offline states.
