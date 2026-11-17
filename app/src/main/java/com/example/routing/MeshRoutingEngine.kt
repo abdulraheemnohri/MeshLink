@@ -56,6 +56,7 @@ class MeshRoutingEngine(
     private val endpointPaths = ConcurrentHashMap<String, ConcurrentHashMap<TransportType, DiscoveredEndpoint>>()
     private val ephemeralSessionProtocol = EphemeralSessionHandshake()
     private val pendingEphemeralOffers = ConcurrentHashMap<String, EphemeralSessionHandshake.PendingOffer>()
+    private val pendingEphemeralOfferExpiry = ConcurrentHashMap<String, Long>()
     private val ephemeralSessions = ConcurrentHashMap<String, EphemeralSessionHandshake.SessionKeys>()
     private val ephemeralSessionExpiry = ConcurrentHashMap<String, Long>()
     private val packetReplayStore = PacketReplayStore(context)
@@ -513,12 +514,20 @@ class MeshRoutingEngine(
 
     private suspend fun initiateEphemeralSession(peerId: String): Boolean {
         if (getActiveEphemeralSession(peerId) != null) return true
+        val now = System.currentTimeMillis()
+        pendingEphemeralOfferExpiry.entries.removeAll { (sessionId, expiry) ->
+            if (now >= expiry) {
+                pendingEphemeralOffers.remove(sessionId)
+                true
+            } else false
+        }
         if (pendingEphemeralOffers.values.any { it.offer.responderId == peerId }) return false
         val peer = repository.getPeerById(peerId) ?: return false
         val endpoint = activeEndpoints[peerId] ?: return false
         if (!peer.verifiedByQr || peer.blocked || peer.signingPublicKey.isBlank()) return false
         val pending = runCatching { crypto.createEphemeralSessionOffer(peerId, ephemeralSessionProtocol) }.getOrNull() ?: return false
         pendingEphemeralOffers[pending.offer.sessionId] = pending
+        pendingEphemeralOfferExpiry[pending.offer.sessionId] = now + SESSION_HANDSHAKE_TTL_MS
         val offer = pending.offer
         val payload = JSONObject().apply {
             put("version", offer.version)
@@ -544,7 +553,10 @@ class MeshRoutingEngine(
             )
         )
         val sent = sendOverBestTransport(endpoint, packet)
-        if (!sent) pendingEphemeralOffers.remove(offer.sessionId)
+        if (!sent) {
+            pendingEphemeralOffers.remove(offer.sessionId)
+            pendingEphemeralOfferExpiry.remove(offer.sessionId)
+        }
         return sent
     }
 
@@ -566,6 +578,15 @@ class MeshRoutingEngine(
                     )
                 }.getOrNull() ?: return false
                 if (offer.initiatorId != packet.senderId) return false
+                if (!packetReplayStore.rememberIfNew("session:${offer.sessionId}", packet.expiresAt, System.currentTimeMillis())) {
+                    repository.logSecurityEvent(
+                        eventType = "SESSION_REPLAY_DROP",
+                        peerId = packet.senderId,
+                        severity = "WARN",
+                        summary = "Rejected a previously consumed ephemeral session offer"
+                    )
+                    return false
+                }
                 val accepted = runCatching {
                     crypto.acceptEphemeralSessionOffer(offer, senderSigningKey, ephemeralSessionProtocol)
                 }.getOrNull() ?: return false
@@ -619,6 +640,7 @@ class MeshRoutingEngine(
                 }.getOrNull() ?: return false
                 if (response.responderId != packet.senderId) return false
                 val pending = pendingEphemeralOffers.remove(response.sessionId) ?: return false
+                pendingEphemeralOfferExpiry.remove(response.sessionId)
                 val keys = runCatching {
                     crypto.finishEphemeralSessionOffer(pending, response, senderSigningKey, ephemeralSessionProtocol)
                 }.getOrNull() ?: return false
