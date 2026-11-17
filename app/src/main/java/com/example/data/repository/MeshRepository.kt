@@ -351,6 +351,18 @@ class MeshRepository(
     }
 
     suspend fun joinGroupFromInvite(invite: MeshCryptoEngine.GroupInvitePayload): GroupEntity {
+        require(invite.groupId.matches(Regex("[A-Za-z0-9_-]{4,80}"))) { "Invalid group identifier" }
+        require(invite.createdBy.isNotBlank()) { "Missing group creator identity" }
+        require(invite.epoch > 0) { "Invalid group key epoch" }
+        require(crypto.isValidGroupKeyB64(invite.groupKeyB64)) { "Invalid group encryption key" }
+        val existing = groupDao.getGroupById(invite.groupId)
+        if (existing != null) {
+            require(existing.createdBy == invite.createdBy) { "Group creator identity mismatch" }
+            require(invite.epoch >= existing.keyEpoch) { "Stale group invitation epoch" }
+            require(invite.epoch != existing.keyEpoch || invite.groupKeyB64 == existing.groupSymmetricKeyB64) {
+                "Conflicting group key for the same epoch"
+            }
+        }
         val local = ensureInitialized()
         val group = GroupEntity(
             groupId = invite.groupId,
