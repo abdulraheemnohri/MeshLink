@@ -343,7 +343,16 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         if (text.isBlank()) return
         viewModelScope.launch {
-            routingEngine.sendGroupMessage(groupId, text.trim(), strategy)
+            val sent = routingEngine.sendGroupMessage(groupId, text.trim(), strategy)
+            if (!sent) {
+                _snackMessages.tryEmit(
+                    if (strategy == RoutingStrategy.DIRECT) {
+                        "Direct mode could not reach any verified group member. No relay or offline queue was used."
+                    } else {
+                        "Group message could not be dispatched. It remains available for retry when a route is established."
+                    }
+                )
+            }
         }
     }
 
