@@ -3,6 +3,7 @@ package com.example
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import android.util.Base64
 import com.example.core.crypto.MeshCryptoEngine
 import com.example.core.crypto.PeerIdentityPayload
 import com.example.data.database.AppDatabase
@@ -19,12 +20,15 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.security.KeyPairGenerator
+import java.security.spec.ECGenParameterSpec
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class PeerIdentityPinningTest {
     private lateinit var db: AppDatabase
     private lateinit var repository: MeshRepository
+    private lateinit var crypto: MeshCryptoEngine
 
     @Before
     fun setup() {
@@ -32,7 +36,8 @@ class PeerIdentityPinningTest {
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        repository = MeshRepository(db, MeshCryptoEngine(context))
+        crypto = MeshCryptoEngine(context)
+        repository = MeshRepository(db, crypto)
     }
 
     @After
@@ -42,12 +47,19 @@ class PeerIdentityPinningTest {
 
     @Test
     fun qrImportStartsUntrustedAndChangedKeysCannotReplacePinnedIdentity() = runBlocking {
+        val keyGenerator = KeyPairGenerator.getInstance("EC").apply {
+            initialize(ECGenParameterSpec("secp256r1"))
+        }
+        val firstSigning = Base64.encodeToString(keyGenerator.generateKeyPair().public.encoded, Base64.NO_WRAP)
+        val firstAgreement = Base64.encodeToString(keyGenerator.generateKeyPair().public.encoded, Base64.NO_WRAP)
+        val firstFingerprint = crypto.computeFingerprint(firstSigning, firstAgreement)
+        val deviceId = firstFingerprint.replace(":", "").take(16).lowercase()
         val original = PeerIdentityPayload(
-            deviceId = "peer_pinned_01",
+            deviceId = deviceId,
             alias = "Trusted candidate",
-            signingPublicKeyB64 = "signing-key-a",
-            agreementPublicKeyB64 = "agreement-key-a",
-            fingerprint = "FP-A"
+            signingPublicKeyB64 = firstSigning,
+            agreementPublicKeyB64 = firstAgreement,
+            fingerprint = firstFingerprint
         )
 
         val imported = repository.importVerifiedPeer(original)
@@ -59,18 +71,20 @@ class PeerIdentityPinningTest {
         assertTrue(sameIdentity.verifiedByQr)
         assertTrue(sameIdentity.blocked)
 
+        val changedSigning = Base64.encodeToString(keyGenerator.generateKeyPair().public.encoded, Base64.NO_WRAP)
+        val changedAgreement = Base64.encodeToString(keyGenerator.generateKeyPair().public.encoded, Base64.NO_WRAP)
         val changed = original.copy(
-            signingPublicKeyB64 = "attacker-signing-key",
-            agreementPublicKeyB64 = "attacker-agreement-key",
-            fingerprint = "FP-B"
+            signingPublicKeyB64 = changedSigning,
+            agreementPublicKeyB64 = changedAgreement,
+            fingerprint = crypto.computeFingerprint(changedSigning, changedAgreement)
         )
         assertThrows(PeerIdentityKeyChangedException::class.java) {
             runBlocking { repository.importVerifiedPeer(changed) }
         }
 
         val stored = db.peerDao().getPeerById(original.deviceId)!!
-        assertEquals("FP-A", stored.fingerprint)
-        assertEquals("signing-key-a", stored.signingPublicKey)
+        assertEquals(firstFingerprint, stored.fingerprint)
+        assertEquals(firstSigning, stored.signingPublicKey)
         assertTrue(stored.verifiedByQr)
         assertTrue(stored.blocked)
     }
