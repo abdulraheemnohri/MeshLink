@@ -481,6 +481,9 @@ class MeshRepository(
         require(group.keyEpoch == expectedEpoch) { "Group epoch changed while preparing role update" }
         val target = groupDao.getMember(groupId, targetPeerId)
             ?: throw IllegalArgumentException("Group member does not exist")
+        require(issuedAt > target.roleUpdatedAt) {
+            "Role update timestamp must be newer than the current member role"
+        }
         if (target.role == "ADMIN" && role != "ADMIN") {
             require(groupDao.countAdmins(groupId) > 1) { "Cannot demote the last group admin" }
         }
