@@ -653,7 +653,9 @@ fun DiagnosticsScreen(
 ) {
     var eventSearch by remember { mutableStateOf("") }
     var eventCategory by remember { mutableStateOf("ALL") }
-    val eventCategories = listOf("ALL", "DISCOVERY", "CONNECT", "RELAY_FWD", "ACK_RX", "ROUTE_UPDATE", "BRIDGE_FWD", "LOOPBACK_TEST")
+    val eventCategories = remember(networkEvents) {
+        listOf("ALL") + (networkEvents.map { it.eventType }.filter { it.isNotBlank() }.distinct().sorted())
+    }
     val filteredEvents = remember(networkEvents, eventSearch, eventCategory) {
         networkEvents.filter { event ->
             (eventCategory == "ALL" || event.eventType.equals(eventCategory, ignoreCase = true)) &&
