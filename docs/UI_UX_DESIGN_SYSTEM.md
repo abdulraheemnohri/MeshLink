@@ -82,3 +82,11 @@ Review every route on a compact phone and a wide screen, with both light and dar
 - Recent connection path records include transport, connection state, RSSI, latency, bytes sent and bytes received.
 - The profile does not expose private keys or export identity material. Signal values are shown as not reported when the stored value indicates no measurement.
 - Expanded profile controls include stable test tags.
+
+
+## Topology and diagnostics accessibility pass
+
+- Every topology node can be selected from a labelled button list as well as the canvas, so inspection does not depend on touch precision alone.
+- Selected peer details include only persisted identity and route data; missing route records are presented as missing rather than drawing a speculative connection.
+- Diagnostics search/filter controls have stable test tags, and the event list has a dedicated no-results state.
+- Verify with TalkBack, large font/display scaling and reduced-motion system settings on a physical Android device. The radar pulse remains decorative and must not be interpreted as live radio activity.
