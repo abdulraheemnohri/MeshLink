@@ -141,8 +141,8 @@ class NearbyConnectionsMeshTransport(
 
     override suspend fun triggerDiscovery() {
         check(isRunning) { "Nearby Connections is not running" }
-        client.stopDiscovery().await()
-        client.startDiscovery(SERVICE_ID, discovery, DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()).await()
+        awaitCompletion(client.stopDiscovery())
+        awaitCompletion(client.startDiscovery(SERVICE_ID, discovery, DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()))
     }
 
     override suspend fun connect(endpoint: DiscoveredEndpoint): Boolean {
@@ -173,7 +173,7 @@ class NearbyConnectionsMeshTransport(
 
     override suspend fun stop() = withContext(Dispatchers.IO) {
         isRunning = false
-        runCatching { client.stopAdvertising().await() }
+        runCatching { awaitCompletion(client.stopAdvertising()) }
         runCatching { client.stopDiscovery().await() }
         runCatching { client.stopAllEndpoints() }
         waiters.values.forEach { it.complete(false) }
