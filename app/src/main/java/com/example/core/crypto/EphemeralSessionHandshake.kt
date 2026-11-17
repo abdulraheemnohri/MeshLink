@@ -24,6 +24,11 @@ import javax.crypto.spec.SecretKeySpec
  * voice, location, or legacy queued traffic. This is a scoped session upgrade, not app-wide
  * forward secrecy.
  */
+internal fun shouldAcceptIncomingSessionOffer(
+    localPendingSessionId: String,
+    incomingSessionId: String
+): Boolean = incomingSessionId < localPendingSessionId
+
 class EphemeralSessionHandshake(private val random: SecureRandom = SecureRandom()) {
     data class Offer(
         val version: Int, val sessionId: String, val initiatorId: String, val responderId: String,
