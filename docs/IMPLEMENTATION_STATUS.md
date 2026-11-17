@@ -307,7 +307,7 @@ The app's release keystore must remain private and outside Git. A signed release
 ## Durable group role synchronization (2026-11-17)
 
 - Added Room schema version 9 and migration 8→9 for `group_role_updates`, with indexes for group and recipient lookups.
-- Every role change now creates a durable per-recipient outbox record containing packet ID, group/epoch, recipient, target member, role, issue timestamp, delivery status and acknowledgement timestamp.
+- Every role change now atomically updates the local member role and batch-persists a durable per-recipient outbox record containing packet ID, group/epoch, recipient, target member, role, issue timestamp, delivery status and acknowledgement timestamp before any network send.
 - Delivery ACKs are correlated to the recorded intended recipient. A mismatched peer cannot mark another recipient's role update acknowledged.
 - On peer discovery/reconnection, unresolved role updates are retried. Expired queued packets can be replaced with a new packet ID while preserving the original role issue timestamp.
 - Receiver application is idempotent for an exact duplicate role update, allowing a retry to be acknowledged when the original ACK was lost. Older updates are rejected; newer role decisions and key epochs supersede stale outbox records.
