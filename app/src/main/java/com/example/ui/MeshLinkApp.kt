@@ -120,6 +120,7 @@ fun MeshLinkApp(viewModel: MeshViewModel) {
             MeshRoute.SECURITY to "Security",
             MeshRoute.ROUTING to "Routing",
             MeshRoute.DIAGNOSTICS to "Diagnostics",
+            MeshRoute.PROFILE to "Profile",
             MeshRoute.SETTINGS to "Settings"
         )
 
