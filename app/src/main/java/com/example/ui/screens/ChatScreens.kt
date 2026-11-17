@@ -219,6 +219,7 @@ fun ChatsHubScreen(
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
                                     onClick = { showJoinGroupDialog = true },
+                                    enabled = false,
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(48.dp)
@@ -611,7 +612,7 @@ fun GroupChatScreen(
                             onClick = { showInviteDialog = true },
                             modifier = Modifier.testTag("group_invite_qr_button")
                         ) {
-                            Icon(Icons.Filled.QrCode2, contentDescription = "Share Group Invite", tint = NeonCyan)
+                            Icon(Icons.Filled.QrCode2, contentDescription = "Group invitation security notice", tint = NeonCyan)
                         }
                         IconButton(
                             onClick = { showMembersDialog = true },
