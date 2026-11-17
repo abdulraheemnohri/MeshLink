@@ -279,8 +279,9 @@ class MeshRoutingEngine(
                 priority = MeshPacket.PRIORITY_HIGH
             )
         )
-        repository.addGroupMember(groupId, peer)
-        return dispatchPacket(packet)
+        val queuedOrSent = dispatchPacket(packet)
+        if (queuedOrSent) repository.addGroupMember(groupId, peer)
+        return queuedOrSent
     }
 
     suspend fun sendEmergencyBroadcast(
