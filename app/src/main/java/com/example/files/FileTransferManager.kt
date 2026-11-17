@@ -72,6 +72,8 @@ class FileTransferManager(
     }
 
     suspend fun queueOutgoingFile(uri: Uri, peerId: String): FileTransferEntity? {
+        val peer = repository.getPeerById(peerId) ?: return null
+        if (!canUseFileTransfer(peer.verifiedByQr, peer.blocked, peer.agreementPublicKey)) return null
         val resolver = context.contentResolver
         var fileName = "mesh_file_${System.currentTimeMillis()}"
         var fileSize = 0L
@@ -118,7 +120,6 @@ class FileTransferManager(
         val fullSha256 = shaDigest.digest().joinToString("") { "%02x".format(it) }
         val totalChunks = ((actualSize + CHUNK_SIZE - 1) / CHUNK_SIZE).toInt().coerceAtLeast(1)
 
-        val peer = repository.getPeerById(peerId)
         val transfer = FileTransferEntity(
             transferId = transferId,
             peerId = peerId,
@@ -439,6 +440,16 @@ class FileTransferManager(
     }
 
     private suspend fun handleIncomingFilePacket(senderId: String, payload: JSONObject) {
+        val peer = repository.getPeerById(senderId) ?: return
+        if (!canUseFileTransfer(peer.verifiedByQr, peer.blocked, peer.agreementPublicKey)) {
+            repository.logSecurityEvent(
+                eventType = "UNTRUSTED_FILE_TRANSFER_DROP",
+                peerId = senderId,
+                severity = "WARN",
+                summary = "Rejected file-transfer traffic from a peer that is not QR-verified and unblocked"
+            )
+            return
+        }
         val kind = payload.optString("kind")
         val transferId = payload.optString("transferId")
         if (!transferId.matches(Regex("[A-Za-z0-9_-]{1,96}"))) return
@@ -480,7 +491,6 @@ class FileTransferManager(
         }
 
         if (kind == "OFFER") {
-            val peer = repository.getPeerById(senderId)
             val totalBytes = payload.optLong("totalBytes", -1L)
             val totalChunks = payload.optInt("totalChunks", -1)
             val expectedHash = payload.optString("sha256", "")
