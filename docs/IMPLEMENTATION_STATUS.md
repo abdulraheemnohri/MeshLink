@@ -236,3 +236,12 @@ The following source-level integration is present on `main`:
 CI success proves the checked-in project builds and its automated checks pass in GitHub's environment. It does not prove end-to-end radio interoperability, background reliability, payload transfer completion, or security under hostile network conditions. Before a public production release, complete the two-or-more-device acceptance plan on supported Android versions, including permission denial/recovery, BLE, bonded Bluetooth Classic, Wi-Fi Direct, Wi-Fi Aware, LAN, Nearby Connections, encrypted message delivery, file transfer interruption/resume, group-key rotation, and relay restart/recovery.
 
 The app's release keystore must remain private and outside Git. A signed release APK and physical-device test evidence are not produced by this documentation checkpoint.
+
+
+## Verified file-transfer replay recovery (2026-11-17)
+
+- A receiver that has already assembled and SHA-256-verified a file now handles a retransmitted chunk idempotently.
+- The receiver validates the retransmitted chunk's encoded length and SHA-256, then compares its bytes against the corresponding range in the verified destination file before re-sending the chunk ACK and final verification ACK.
+- A mismatching replay is rejected and recorded as a security event; verified destination content is never overwritten by a late duplicate chunk.
+- Added JVM unit tests for exact chunk matching, wrong bytes, out-of-range reads, missing files and negative offsets.
+- This closes the lost-ACK retry case at the receiver state machine. End-to-end retry behavior, process-restart recovery and multi-device behavior still require Android CI and physical-device tests.
