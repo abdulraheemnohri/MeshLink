@@ -360,3 +360,14 @@ The app's release keystore must remain private and outside Git. A signed release
 - Route metadata now enforces a 32-hop total budget, bounded hop counters, a visited-path limit of 32 and unique visited IDs before dispatch/receive.
 - A relay still decrements the hop budget exactly once and cannot forward to a visited peer or a packet destination already in the path.
 - Source audit confirmed that the origin signature intentionally excludes mutable hop/path fields. A malicious relay can therefore tamper with these routing hints without invalidating the origin signature. The path is not authenticated provenance; a versioned per-hop attestation design remains an explicit security gate.
+
+
+## Chat connection modes (2026-11-17)
+
+- Exposed all five routing modes in both private and group chat: Autonomous, Direct, Store & Forward, Epidemic and Spray & Wait.
+- Chat selectors display the selected mode's routing summary and have stable UI test tags.
+- The selected mode is initialized from and persisted to `SettingsEntity.defaultRoutingStrategy`, so the choice is retained across chats and app restarts.
+- Private messages already pass the selected mode to the routing engine; group messages now also pass the selected mode through the ViewModel to `MeshRoutingEngine.sendGroupMessage`.
+- Added protocol round-trip coverage for every routing enum value and display label.
+- Transport adapter selection remains independent from routing strategy selection; selecting Nearby Connections or LAN does not silently change the DTN forwarding strategy.
+- Physical acceptance remains required to verify Direct delivery, delayed Store & Forward recovery, Epidemic duplicate suppression, Spray & Wait copy-budget behavior and Autonomous decisions across multiple phones.
