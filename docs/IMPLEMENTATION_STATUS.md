@@ -218,3 +218,21 @@ NFC is for short-range identity/bootstrap handoff, not continuous mesh data tran
 - Camera hardware is declared optional so devices without a camera can still install and use MeshLink's manual URI import and QR display.
 - No captured image or scan history is persisted.
 - Validation still required: compile/unit CI, permission denial/retry, low-light focus, rotation, and two-device QR identity import on physical Android devices.
+
+
+## Final integration checkpoint — 2026-11-17
+
+The following source-level integration is present on `main`:
+
+- Android Permission Manager groups optional runtime permissions by feature and requests only the selected group's missing permissions. The manager also links to Android App Settings for permissions that have been permanently denied or need manual adjustment.
+- Camera permission remains on-demand for QR scanning; microphone permission remains optional for voice features; notifications are requested only on Android 13 and newer.
+- Bluetooth runtime permissions are version-aware (Android 12+ Nearby Devices permissions, legacy location permission for older BLE discovery). Nearby Wi-Fi permissions are version-aware (Android 13+ `NEARBY_WIFI_DEVICES`, legacy location permission on older versions).
+- File access uses the system document picker. MeshLink does not request broad external-storage access, contacts, SMS, call logs or background location.
+- Google Nearby Connections is an optional P2P_CLUSTER adapter and requires compatible Google Play services. It is not a universal transport and must gracefully report unavailable services.
+- CI run 44011289600 for commit 8efeb51723485ec245c0a2cdd4da3d4f5ae48858 completed successfully, including the repository's Android verification job.
+
+### Release gate — do not mark as production-ready yet
+
+CI success proves the checked-in project builds and its automated checks pass in GitHub's environment. It does not prove end-to-end radio interoperability, background reliability, payload transfer completion, or security under hostile network conditions. Before a public production release, complete the two-or-more-device acceptance plan on supported Android versions, including permission denial/recovery, BLE, bonded Bluetooth Classic, Wi-Fi Direct, Wi-Fi Aware, LAN, Nearby Connections, encrypted message delivery, file transfer interruption/resume, group-key rotation, and relay restart/recovery.
+
+The app's release keystore must remain private and outside Git. A signed release APK and physical-device test evidence are not produced by this documentation checkpoint.
