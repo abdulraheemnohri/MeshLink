@@ -296,8 +296,9 @@ class MeshRoutingEngine(
         val group = repository.getGroupById(groupId) ?: throw IllegalArgumentException("Group not found")
         require(repository.isGroupAdmin(groupId, local.deviceId)) { "Only a group admin can update roles" }
         val members = repository.getGroupMembersOnce(groupId)
-        require(members.any { it.peerId == targetPeerId }) { "Group member not found" }
-        val issuedAt = System.currentTimeMillis()
+        val target = members.firstOrNull { it.peerId == targetPeerId }
+            ?: throw IllegalArgumentException("Group member not found")
+        val issuedAt = maxOf(System.currentTimeMillis(), target.roleUpdatedAt + 1L)
         val recipients = members.filter { it.peerId != local.deviceId }
         val outbox = recipients.map { member ->
             GroupRoleUpdateEntity(
