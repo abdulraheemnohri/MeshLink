@@ -1,5 +1,12 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -101,6 +108,7 @@ fun HomeScreen(
                 .widthIn(max = 760.dp)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .animateContentSize()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -392,11 +400,21 @@ private fun MetricTile(
     modifier: Modifier = Modifier
 ) {
     GlassPanel(accentColor = accent, modifier = modifier) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.headlineMedium,
-            color = accent
-        )
+        AnimatedContent(
+            targetState = value,
+            transitionSpec = {
+                (slideInVertically { it / 2 } + fadeIn()).togetherWith(
+                    slideOutVertically { -it / 2 } + fadeOut()
+                )
+            },
+            label = "dashboard_metric"
+        ) { animatedValue ->
+            Text(
+                text = animatedValue,
+                style = MaterialTheme.typography.headlineMedium,
+                color = accent
+            )
+        }
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
