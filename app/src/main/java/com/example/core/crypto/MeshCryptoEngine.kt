@@ -182,6 +182,10 @@ class MeshCryptoEngine(private val context: Context) {
         return Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
+    fun isValidGroupKeyB64(groupKeyB64: String): Boolean = runCatching {
+        Base64.decode(groupKeyB64, Base64.NO_WRAP).size == 32
+    }.getOrDefault(false)
+
     fun encryptWithGroupKey(plaintext: String, groupKeyB64: String): String {
         val key = SecretKeySpec(Base64.decode(groupKeyB64, Base64.NO_WRAP), "AES")
         return encryptAesGcm(plaintext.toByteArray(Charsets.UTF_8), key)
