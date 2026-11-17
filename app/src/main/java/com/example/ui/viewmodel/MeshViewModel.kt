@@ -472,11 +472,11 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun exportVerifiedTransfer(transferId: String) {
+    fun exportVerifiedTransfer(transferId: String, destination: Uri) {
         viewModelScope.launch {
-            val uri = fileManager.exportVerifiedDownload(transferId)
+            val saved = fileManager.exportVerifiedToUri(transferId, destination)
             _snackMessages.emit(
-                if (uri != null) "Verified file saved to Downloads/MeshLink"
+                if (saved) "Verified file saved successfully"
                 else "Export failed: file is not verified or could not be copied safely"
             )
         }
