@@ -210,6 +210,14 @@ class MeshRoutingEngine(
     ): Boolean {
         val local = repository.ensureInitialized()
         val group = repository.getGroupById(groupId) ?: return false
+        if (repository.hasUnacknowledgedGroupKeyUpdates(groupId)) {
+            repository.logSecurityEvent(
+                eventType = "GROUP_MESSAGE_BLOCKED_PENDING_EPOCH",
+                severity = "WARN",
+                summary = "Blocked group message until every remaining member acknowledges the active key epoch"
+            )
+            return false
+        }
         val settings = repository.getSettingsOnce()
         val expiresAt = System.currentTimeMillis() + settings.defaultMessageTtlHours * 3600_000L
 
@@ -293,8 +301,18 @@ class MeshRoutingEngine(
                     priority = MeshPacket.PRIORITY_HIGH
                 )
             )
+            repository.recordGroupKeyUpdate(group.groupId, group.keyEpoch, member.peerId, packet.messageId, "PENDING")
             val deliveredNow = dispatchPacket(packet)
-            if (deliveredNow || repository.getPendingPacketById(packet.messageId) != null) queuedOrSent++
+            val queued = repository.getPendingPacketById(packet.messageId) != null
+            repository.recordGroupKeyUpdate(
+                group.groupId, group.keyEpoch, member.peerId, packet.messageId,
+                when {
+                    deliveredNow -> "SENT"
+                    queued -> "QUEUED"
+                    else -> "FAILED"
+                }
+            )
+            if (deliveredNow || queued) queuedOrSent++
         }
         repository.logSecurityEvent(
             eventType = "GROUP_KEY_UPDATE_DISTRIBUTION",
@@ -1258,6 +1276,7 @@ class MeshRoutingEngine(
                 val baseEmergencyId = ackId.substringBefore("_")
                 repository.updateMessageStatus(ackId, "DELIVERED", System.currentTimeMillis(), packet.hopCount)
                 repository.removePendingPacket(ackId)
+                repository.markGroupKeyUpdateAcknowledged(ackId)
                 val ackAlias = senderPeer?.alias ?: packet.senderId
                 repository.recordEmergencyAck(baseEmergencyId, packet.senderId, ackAlias)
                 repository.logNetworkEvent(
