@@ -178,7 +178,6 @@ fun OnboardingScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Spacer(Modifier.height(8.dp))
-                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = "Grant only the capabilities you plan to use. Nearby-device and Wi-Fi permissions enable discovery; location and microphone are for location sharing and push-to-talk. You can continue without optional permissions and enable them later in Settings.",
                         style = MaterialTheme.typography.bodySmall,
