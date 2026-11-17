@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -52,7 +53,7 @@ class MeshRelayService : Service() {
         if (startupJob?.isActive != true && !container.isRelayRunning.value) {
             stopping = false
             startupJob = serviceScope.launch {
-                runCatching {
+                val startup = RelayTaskGuard.run {
                     val settings = container.repository.getSettingsOnce()
                     container.repository.ensureInitialized()
 
@@ -64,15 +65,27 @@ class MeshRelayService : Service() {
                         if (settings.wifiDirectEnabled) add(TransportType.WIFI_DIRECT)
                         if (settings.wifiAwareEnabled) add(TransportType.WIFI_AWARE)
                     }
-                    // Start only radios enabled by the user's settings. A failure on one
-                    // adapter is isolated by the coordinator and does not block others.
+                    // A failed adapter is isolated. The relay is considered started only
+                    // when at least one enabled transport actually reports running.
                     container.discoveryCoordinator.start(enabledTransports)
                     container.discoveryCoordinator.discoverAll()
+                    check(container.discoveryCoordinator.transportHealth.value.any { it.running }) {
+                        "No enabled mesh transport could be started"
+                    }
 
                     container.isRelayRunning.value = true
                     startMaintenance(container)
-                }.onFailure {
+                }
+                if (startup.isFailure) {
                     container.isRelayRunning.value = false
+                    container.discoveryCoordinator.stopAll()
+                    RelayTaskGuard.run {
+                        container.repository.logNetworkEvent(
+                            transportType = "RELAY",
+                            eventType = "START_FAILED",
+                            summary = startup.exceptionOrNull()?.message ?: "Relay startup failed"
+                        )
+                    }
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 }
@@ -86,8 +99,20 @@ class MeshRelayService : Service() {
         if (maintenanceJob?.isActive == true) return
         maintenanceJob = serviceScope.launch {
             while (isActive && !stopping) {
-                runCatching { container.routingEngine.flushStoreAndForwardQueue() }
-                runCatching { container.repository.purgeExpiredCache() }
+                val flush = RelayTaskGuard.run { container.routingEngine.flushStoreAndForwardQueue() }
+                val purge = RelayTaskGuard.run { container.repository.purgeExpiredCache() }
+                if (flush.isFailure || purge.isFailure) {
+                    RelayTaskGuard.run {
+                        container.repository.logNetworkEvent(
+                            transportType = "RELAY",
+                            eventType = "MAINTENANCE_ERROR",
+                            summary = listOfNotNull(
+                                flush.exceptionOrNull()?.message,
+                                purge.exceptionOrNull()?.message
+                            ).joinToString("; ").take(500)
+                        )
+                    }
+                }
                 delay(MAINTENANCE_INTERVAL_MS)
             }
         }
@@ -98,12 +123,12 @@ class MeshRelayService : Service() {
         stopping = true
         val container = (application as? MeshLinkApplication)?.container
         serviceScope.launch {
-            startupJob?.cancel()
-            maintenanceJob?.cancel()
+            startupJob?.cancelAndJoin()
+            maintenanceJob?.cancelAndJoin()
             if (container != null) {
                 stopTransports(container)
                 container.isRelayRunning.value = false
-                runCatching { container.repository.markAllDisconnected() }
+                RelayTaskGuard.run { container.repository.markAllDisconnected() }
             }
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelfResult(startId)
