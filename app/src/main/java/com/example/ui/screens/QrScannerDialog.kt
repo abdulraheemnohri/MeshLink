@@ -117,9 +117,9 @@ private fun QrCameraPreview(
     }
     val delivered = remember { AtomicBoolean(false) }
     val active = remember { AtomicBoolean(true) }
-    val executor = remember(retryToken) { Executors.newSingleThreadExecutor() }
     var cameraError by remember { mutableStateOf<String?>(null) }
     var retryToken by remember { mutableStateOf(0) }
+    val executor = remember(retryToken) { Executors.newSingleThreadExecutor() }
 
     DisposableEffect(lifecycleOwner, previewView, retryToken) {
         val providerFuture = ProcessCameraProvider.getInstance(context)
