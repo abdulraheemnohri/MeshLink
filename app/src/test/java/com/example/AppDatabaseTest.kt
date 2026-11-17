@@ -116,6 +116,13 @@ class AppDatabaseTest {
     }
 
     @Test
+    fun settingsDao_persistsNearbyConnectionsOptIn() = runBlocking {
+        val dao = db.settingsDao()
+        dao.upsert(com.example.data.entities.SettingsEntity(nearbyConnectionsEnabled = true))
+        assertTrue(dao.getSettingsOnce()!!.nearbyConnectionsEnabled)
+    }
+
+    @Test
     fun deviceIdentityDao_persistsAndUpdatesLocalNode() = runBlocking {
         val dao = db.deviceIdentityDao()
         assertNull(dao.getIdentityOnce())
