@@ -137,6 +137,45 @@ class FileTransferManager(
         return transfer
     }
 
+    /** Export a received file only after re-checking its persisted size and SHA-256. */
+    suspend fun exportVerifiedDownload(transferId: String): Uri? {
+        val transfer = repository.getFileTransferById(transferId) ?: return null
+        if (transfer.isOutgoing || transfer.status != "VERIFIED") return null
+        val source = File(transfer.localUriOrPath)
+        if (!source.isFile || source.length() != transfer.totalBytes) return null
+        val digest = MessageDigest.getInstance("SHA-256")
+        source.inputStream().use { input ->
+            val buffer = ByteArray(16 * 1024)
+            var count: Int
+            while (input.read(buffer).also { count = it } != -1) digest.update(buffer, 0, count)
+        }
+        val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+        if (!actualHash.equals(transfer.sha256, true)) {
+            repository.logSecurityEvent("EXPORT_HASH_FAIL", transfer.peerId, "ALERT", "Blocked export because verified file changed on disk: $transferId")
+            return null
+        }
+        val safeName = transfer.fileName.substringAfterLast('/').substringAfterLast('\\')
+            .filter { it.code >= 32 && it != '/' && it != '\\' }.take(120).ifBlank { "mesh_received_file" }
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, safeName)
+            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, transfer.mimeType)
+            put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/MeshLink")
+            put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val resolver = context.contentResolver
+        val destination = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+        return try {
+            resolver.openOutputStream(destination, "w")?.use { output -> source.inputStream().use { it.copyTo(output) } }
+                ?: throw java.io.IOException("Unable to open Downloads destination")
+            val publish = android.content.ContentValues().apply { put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0) }
+            resolver.update(destination, publish, null, null)
+            destination
+        } catch (error: Exception) {
+            resolver.delete(destination, null, null)
+            repository.logNetworkEvent(transfer.transportType, "FILE_EXPORT_ERR", transfer.peerId, "Could not export verified file ${transfer.fileName}: " + error.message)
+            null
+        }
+    }
     suspend fun pauseTransfer(transferId: String) {
         pausedTransfers[transferId] = true
         pendingAcks.entries.filter { it.key.startsWith("$transferId:") }.forEach {
