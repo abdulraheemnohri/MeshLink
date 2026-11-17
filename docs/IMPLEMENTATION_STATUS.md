@@ -178,3 +178,13 @@ NFC is for short-range identity/bootstrap handoff, not continuous mesh data tran
 - The ViewModel exposes the health stream and the Diagnostics screen displays each adapter's runtime state and last scan time.
 - Unit coverage verifies successful startup and scan timestamps, failed adapter startup reporting, and stopped-state updates.
 - This is runtime lifecycle telemetry, not proof of peer reachability or successful end-to-end packet delivery. Physical-device acceptance remains required.
+
+
+## Durable packet replay protection (2026-11-17)
+
+- Added `PacketReplayStore`, backed by app-private SharedPreferences, to retain accepted packet IDs across process restarts.
+- Packet IDs are checked before expensive processing and atomically recorded after the sender identity/signature checks, closing the concurrent duplicate-processing window.
+- Expired entries are pruned and the store enforces a configurable bounded capacity (10,000 entries by default).
+- The store fails closed when persistence cannot be committed; invalid, blank, overlong and expired IDs are rejected.
+- Robolectric tests cover persistence across store instances, expiry, invalid IDs and capacity eviction.
+- This is bounded local duplicate suppression, not a replacement for end-to-end delivery acknowledgements or cryptographic replay-resistant session protocols.
