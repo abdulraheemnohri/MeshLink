@@ -54,7 +54,7 @@ class AppContainer(context: Context) {
 
     val routingEngine = MeshRoutingEngine(appContext, repository, crypto).apply {
         registerTransports(
-            listOf(lanTransport, wifiDirectTransport, wifiAwareTransport, bleTransport, bluetoothClassicTransport)
+            listOf(lanTransport, wifiDirectTransport, wifiAwareTransport, bleTransport, bluetoothClassicTransport, nearbyConnectionsTransport)
         )
     }
 
