@@ -198,6 +198,10 @@ class MeshRepository(
                 payload.deviceId, existing.fingerprint, payload.fingerprint
             )
         }
+        require(crypto.areValidIdentityPublicKeys(
+            payload.signingPublicKeyB64,
+            payload.agreementPublicKeyB64
+        )) { "Peer identity contains invalid EC public keys" }
         val computedFingerprint = crypto.computeFingerprint(
             payload.signingPublicKeyB64,
             payload.agreementPublicKeyB64
