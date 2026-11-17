@@ -269,3 +269,14 @@ The app's release keystore must remain private and outside Git. A signed release
 - Added startup reconciliation for transfers left in `TRANSFERRING` after process death. Outgoing transfers are paused with acknowledged-chunk progress recalculated; incoming transfers are paused with partial chunk count reconciled so the sender can resume after reconnect.
 - Added best-effort completion notifications for both sender and receiver after final SHA-256 verification. Notifications are optional and a denied notification permission does not stop file delivery.
 - Remaining verification: run Android CI, test SAF providers and notification permission behavior on Android 10/13/17, and perform a two-device kill/relaunch/resume acceptance test. The in-memory pending-ACK waiters are intentionally recreated on reconnect; they are not persisted across process death.
+
+
+## Built-in support center and release updates (2026-11-17)
+
+- Settings now includes a built-in bug report form with issue category, severity, bounded title/description fields, and an optional basic device/app environment block.
+- Reports are first saved under the app-private `filesDir/bug-reports` directory. MeshLink does not silently upload reports, attach private chat/file contents, or include cryptographic secrets. The user is sent to a prefilled GitHub issue form and must review, sign in and submit manually. Local reports remain on-device.
+- The update center queries the official GitHub `releases/latest` endpoint over HTTPS, displays release notes and compares the latest stable tag with the installed version.
+- If a release includes an APK asset, the user can download it with Android DownloadManager and explicitly open the package installer. Android's unknown-app install permission is requested only when needed and only after the user chooses installation.
+- APK installation is subject to Android package signature checks. An update must use the same application ID and signing key as the installed build; this feature cannot make a differently signed APK install over an existing app.
+- The update checker requires internet access. MeshLink's messaging and local mesh features remain independent of the release-check service.
+- Remaining release validation: run Android CI; verify a real tagged GitHub release with APK asset, no-APK release, offline/timeout/error paths, download completion/failure, Android 8+ install permission flow, same-signature upgrade and signature mismatch rejection. No APK has been installed or verified from this source change.
