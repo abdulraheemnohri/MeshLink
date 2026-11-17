@@ -26,6 +26,7 @@ import com.example.data.entities.FileTransferEntity
 import com.example.data.entities.GroupEntity
 import com.example.data.entities.GroupMemberEntity
 import com.example.data.entities.GroupKeyUpdateEntity
+import com.example.data.entities.GroupRoleUpdateEntity
 import com.example.data.entities.MessageEntity
 import com.example.data.entities.NetworkEventEntity
 import com.example.data.entities.PeerEntity
@@ -44,6 +45,7 @@ import com.example.data.entities.UserSettings
         GroupEntity::class,
         GroupMemberEntity::class,
         GroupKeyUpdateEntity::class,
+        GroupRoleUpdateEntity::class,
         EmergencyBroadcastEntity::class,
         RouteEntity::class,
         PendingPacketEntity::class,
@@ -54,7 +56,7 @@ import com.example.data.entities.UserSettings
         SettingsEntity::class,
         UserSettings::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -116,6 +118,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `group_role_updates` (
+                        `packetId` TEXT NOT NULL,
+                        `groupId` TEXT NOT NULL,
+                        `epoch` INTEGER NOT NULL,
+                        `peerId` TEXT NOT NULL,
+                        `targetPeerId` TEXT NOT NULL,
+                        `role` TEXT NOT NULL,
+                        `issuedAt` INTEGER NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        `acknowledgedAt` INTEGER,
+                        PRIMARY KEY(`packetId`)
+                    )""".trimIndent()
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_group_role_updates_groupId ON group_role_updates(groupId)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_group_role_updates_peerId ON group_role_updates(peerId)")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -125,7 +149,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "meshlink_local.db"
-                ).addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                ).addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     // Never erase local identities, peers, messages or transfer state to recover
                     // from an unknown schema. Missing migration paths fail closed and preserve the
                     // existing database so a future recovery migration can be supplied.
