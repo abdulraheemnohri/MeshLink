@@ -553,8 +553,13 @@ class MeshRepository(
         true
     }
 
-    suspend fun recordGroupKeyUpdate(groupId: String, epoch: Int, peerId: String, packetId: String, status: String) {
-        groupDao.upsertKeyUpdate(GroupKeyUpdateEntity(packetId, groupId, epoch, peerId, status))
+    suspend fun recordGroupKeyUpdate(
+        groupId: String, epoch: Int, peerId: String, packetId: String, status: String,
+        revokedPeerId: String? = null
+    ) {
+        groupDao.upsertKeyUpdate(
+            GroupKeyUpdateEntity(packetId, groupId, epoch, peerId, status, revokedPeerId = revokedPeerId)
+        )
     }
 
     suspend fun markGroupKeyUpdateAcknowledged(packetId: String, acknowledgingPeerId: String): Boolean {
