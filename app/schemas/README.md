@@ -3,8 +3,8 @@
 Room's KSP processor writes versioned database schema JSON files into this directory.
 
 - Database class: `com.example.data.database.AppDatabase`
-- Current schema version: `8`
-- Expected generated snapshot: `com.example.data.database.AppDatabase/8.json`
+- Current schema version: `9`
+- Expected generated snapshot: `com.example.data.database.AppDatabase/9.json`
 
 Do not hand-author or edit generated schema JSON. Generate it with the Android Gradle build, review the JSON alongside every database entity/DAO/migration change, and commit the generated snapshot. CI also uploads the generated schema directory as a build artifact so a missing committed snapshot is visible during migration review.
 
