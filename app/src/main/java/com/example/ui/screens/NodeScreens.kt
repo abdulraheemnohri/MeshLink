@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AltRoute
 import androidx.compose.material.icons.filled.BugReport
@@ -182,6 +183,7 @@ fun IdentityScreen(
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
+            state = settingsListState,
             modifier = Modifier
                 .widthIn(max = 760.dp)
                 .fillMaxSize()
@@ -824,6 +826,11 @@ fun SettingsScreen(
 ) {
     var emergencyDraft by remember(settings.emergencyMessage) { mutableStateOf(settings.emergencyMessage) }
     var permissionRefresh by remember { mutableStateOf(0) }
+    val settingsListState = rememberLazyListState()
+    val settingsScope = rememberCoroutineScope()
+    val jumpToSection: (Int) -> Unit = { index ->
+        settingsScope.launch { settingsListState.animateScrollToItem(index) }
+    }
     val context = LocalContext.current
     val permissionGroups = remember {
         listOf(
@@ -848,6 +855,71 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item(key = "settings_control_center") {
+                GlassPanel(accentColor = ElectricTeal) {
+                    val enabledRadios = listOf(
+                        settings.localLanEnabled,
+                        settings.bleEnabled,
+                        settings.bluetoothClassicEnabled,
+                        settings.nearbyConnectionsEnabled,
+                        settings.wifiDirectEnabled,
+                        settings.wifiAwareEnabled
+                    ).count { it }
+                    SectionTitle(
+                        title = "MeshLink Control Center",
+                        subtitle = "Quick status and direct access to the controls you use most"
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        MeshPillBadge(
+                            text = "$enabledRadios / 6 radios enabled",
+                            color = if (enabledRadios > 0) MeshEmerald else MeshAmber
+                        )
+                        MeshPillBadge(
+                            text = if (isRelayRunning) "Relay active" else "Relay stopped",
+                            color = if (isRelayRunning) MeshEmerald else MeshAmber
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("Jump to settings", style = MaterialTheme.typography.titleSmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(
+                            selected = false,
+                            onClick = { jumpToSection(1) },
+                            label = { Text("Security") },
+                            modifier = Modifier.testTag("settings_jump_security")
+                        )
+                        FilterChip(
+                            selected = false,
+                            onClick = { jumpToSection(2) },
+                            label = { Text("Appearance") },
+                            modifier = Modifier.testTag("settings_jump_appearance")
+                        )
+                        FilterChip(
+                            selected = false,
+                            onClick = { jumpToSection(3) },
+                            label = { Text("Permissions") },
+                            modifier = Modifier.testTag("settings_jump_permissions")
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(
+                            selected = false,
+                            onClick = { jumpToSection(4) },
+                            label = { Text("Radios") },
+                            modifier = Modifier.testTag("settings_jump_radios")
+                        )
+                        FilterChip(
+                            selected = false,
+                            onClick = { jumpToSection(6) },
+                            label = { Text("Transport policy") },
+                            modifier = Modifier.testTag("settings_jump_transport_policy")
+                        )
+                    }
+                }
+            }
             item {
                 GlassPanel(accentColor = NeonCyan) {
                     SectionTitle(
