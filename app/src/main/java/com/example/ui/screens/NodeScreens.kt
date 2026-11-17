@@ -3,9 +3,12 @@ package com.example.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ContentValues
+import android.graphics.BitmapFactory
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings as AndroidSettings
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -79,6 +82,12 @@ import com.example.data.entities.UserSettings
 import com.example.ui.components.GlassPanel
 import com.example.ui.components.MeshPillBadge
 import com.example.ui.components.QrCodePreview
+import com.example.ui.components.generateQrBitmap
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.HybridBinarizer
+import java.io.OutputStream
 import com.example.ui.components.SectionTitle
 import com.example.ui.theme.ElectricTeal
 import com.example.ui.theme.MeshAmber
@@ -102,6 +111,47 @@ fun IdentityScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var showQrScanner by remember { mutableStateOf(false) }
     var uriDraft by remember { mutableStateOf("") }
+    var qrActionStatus by remember { mutableStateOf("") }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val decoded = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    val bitmap = BitmapFactory.decodeStream(input) ?: error("The selected image could not be decoded")
+                    val pixels = IntArray(bitmap.width * bitmap.height)
+                    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                    val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
+                    MultiFormatReader().decode(BinaryBitmap(HybridBinarizer(source))).text
+                } ?: error("Could not open the selected image")
+            }
+            decoded.onSuccess { value ->
+                if (value.startsWith("meshlink://peer?")) onImportPeerUri(value)
+                else qrActionStatus = "QR found, but it is not a MeshLink peer identity QR."
+            }.onFailure { qrActionStatus = "Could not read a QR code from that image: ${it.message ?: "unsupported image"}" }
+        }
+    }
+
+    fun saveIdentityQr(): Uri? {
+        val bitmap = generateQrBitmap(identityUri, 1024) ?: return null
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "MeshLink-Identity-${identity?.deviceId ?: "node"}.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            if (android.os.Build.VERSION.SDK_INT >= 29) put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MeshLink")
+            if (android.os.Build.VERSION.SDK_INT >= 29) put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+        val target = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return null
+        return runCatching {
+            context.contentResolver.openOutputStream(target)?.use { output ->
+                if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)) error("PNG encoding failed")
+            } ?: error("Could not open image destination")
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                context.contentResolver.update(target, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+            }
+            target
+        }.getOrElse {
+            context.contentResolver.delete(target, null, null)
+            null
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
@@ -176,6 +226,39 @@ fun IdentityScreen(
                             Spacer(Modifier.width(6.dp))
                             Text("Share")
                         }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                val saved = saveIdentityQr()
+                                qrActionStatus = if (saved != null) "Identity QR saved to Pictures/MeshLink." else "Could not save identity QR image."
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp).testTag("save_identity_qr")
+                        ) { Text("Save QR Image") }
+                        OutlinedButton(
+                            onClick = {
+                                val saved = saveIdentityQr()
+                                if (saved != null) {
+                                    val send = Intent(Intent.ACTION_SEND).apply {
+                                        type = "image/png"
+                                        putExtra(Intent.EXTRA_STREAM, saved)
+                                        clipData = ClipData.newUri(context.contentResolver, "MeshLink identity QR", saved)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(send, "Send MeshLink Identity QR"))
+                                    qrActionStatus = "QR image ready to share."
+                                } else qrActionStatus = "Could not prepare QR image for sharing."
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp).testTag("share_identity_qr")
+                        ) { Text("Send QR Image") }
+                    }
+                    OutlinedButton(
+                        onClick = { imagePicker.launch(arrayOf("image/*")) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp).testTag("import_identity_qr_storage")
+                    ) { Text("Import QR Image from Storage") }
+                    if (qrActionStatus.isNotBlank()) {
+                        Text(qrActionStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(
