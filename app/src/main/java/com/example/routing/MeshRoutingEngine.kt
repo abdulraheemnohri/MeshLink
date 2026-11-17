@@ -1246,7 +1246,9 @@ class MeshRoutingEngine(
             else -> Unit
         }
 
-        // Persist in DTN Store-and-Forward queue
+        // Preserve durable retry state when a queued packet is re-enqueued after
+        // a failed attempt. Otherwise dispatchPacket would reset exponential backoff.
+        val existingPending = repository.getPendingPacketById(packet.messageId)
         repository.enqueuePendingPacket(
             PendingPacketEntity(
                 messageId = packet.messageId,
@@ -1257,7 +1259,9 @@ class MeshRoutingEngine(
                 priority = queuedPacket.priority,
                 remainingSprayCopies = queuedPacket.sprayCopies,
                 hopLimit = queuedPacket.hopLimit,
-                expiresAt = queuedPacket.expiresAt
+                attemptCount = existingPending?.attemptCount ?: 0,
+                expiresAt = queuedPacket.expiresAt,
+                lastAttemptAt = existingPending?.lastAttemptAt ?: 0L
             )
         )
         return false
