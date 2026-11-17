@@ -115,7 +115,7 @@ interface GroupDao {
     @Query("SELECT * FROM group_role_updates WHERE packetId = :packetId LIMIT 1")
     suspend fun getRoleUpdateByPacketId(packetId: String): GroupRoleUpdateEntity?
 
-    @Query("UPDATE group_role_updates SET status = :status, updatedAt = :now, acknowledgedAt = :acknowledgedAt WHERE packetId = :packetId")
+    @Query("UPDATE group_role_updates SET status = :status, updatedAt = :now, acknowledgedAt = :acknowledgedAt WHERE packetId = :packetId AND (status != 'ACKED' OR :status = 'ACKED')")
     suspend fun updateRoleUpdateStatus(packetId: String, status: String, now: Long, acknowledgedAt: Long?)
 
     @Query("SELECT * FROM group_role_updates WHERE groupId = :groupId AND status NOT IN ('ACKED', 'SUPERSEDED') ORDER BY updatedAt ASC")
