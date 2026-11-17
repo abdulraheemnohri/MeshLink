@@ -16,3 +16,9 @@
 local.properties
 .env
 debug.keystore
+
+# Never commit Android signing material
+*.jks
+*.keystore
+*.p12
+*.pfx
