@@ -102,7 +102,6 @@ fun NavigationGraph(
                 transfers = transfers,
                 settings = settings,
                 capabilities = capabilities,
-                transportHealth = transportHealth,
                 isRelayRunning = isRelayRunning,
                 onToggleRelay = { enable ->
                     viewModel.updateSettings { it.copy(backgroundRelayEnabled = enable) }
@@ -313,6 +312,7 @@ fun NavigationGraph(
         composable(MeshRoute.DIAGNOSTICS) {
             DiagnosticsScreen(
                 capabilities = capabilities,
+                transportHealth = transportHealth,
                 isRelayRunning = isRelayRunning,
                 loopbackResult = loopbackResult,
                 networkEvents = networkEvents,
