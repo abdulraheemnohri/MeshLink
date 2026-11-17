@@ -10,7 +10,7 @@ import java.security.SecureRandom
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.X509EncodedKeySpec
-import java.util.Base64
+import android.util.Base64
 import java.util.UUID
 import javax.crypto.KeyAgreement
 import javax.crypto.Mac
@@ -194,8 +194,8 @@ class EphemeralSessionHandshake(private val random: SecureRandom = SecureRandom(
         return output
     }
     private fun randomBytes(size: Int) = ByteArray(size).also(random::nextBytes)
-    private fun encode(bytes: ByteArray) = Base64.getEncoder().withoutPadding().encodeToString(bytes)
-    private fun decode(value: String) = Base64.getDecoder().decode(value)
+    private fun encode(bytes: ByteArray) = Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+    private fun decode(value: String) = Base64.decode(value, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
 
     companion object {
         const val VERSION = 1
