@@ -187,6 +187,104 @@ fun HomeScreen(
                 }
             }
 
+            GlassPanel(accentColor = ElectricTeal) {
+                SectionTitle(
+                    title = "Live Network Control Center",
+                    subtitle = "Current device, peer, queue and transfer activity"
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricTile(
+                        label = "Peers online",
+                        value = connectedCount.toString(),
+                        accent = MeshEmerald,
+                        modifier = Modifier.weight(1f).clickable { onNavigate(MeshRoute.CONNECTIONS) }
+                    )
+                    MetricTile(
+                        label = "Queued packets",
+                        value = pendingPackets.size.toString(),
+                        accent = MeshAmber,
+                        modifier = Modifier.weight(1f).clickable { onNavigate(MeshRoute.ROUTING) }
+                    )
+                    MetricTile(
+                        label = "Active transfers",
+                        value = activeTransfers.toString(),
+                        accent = NeonCyan,
+                        modifier = Modifier.weight(1f).clickable { onNavigate(MeshRoute.TRANSFERS) }
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Relay service", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            if (isRelayRunning) "Running on this device" else "Stopped — background forwarding is inactive",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isRelayRunning,
+                        onCheckedChange = onToggleRelay,
+                        modifier = Modifier.testTag("control_center_relay_switch")
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Connected peers", style = MaterialTheme.typography.titleSmall)
+                val visiblePeers = peers.filter { it.isConnected && !it.blocked }.take(5)
+                if (visiblePeers.isEmpty()) {
+                    Text(
+                        "No connected peers yet. Start discovery to find nearby devices.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    visiblePeers.forEach { peer ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onNavigate(MeshRoute.CONNECTIONS) }
+                                .padding(vertical = 5.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(peer.alias.ifBlank { "MeshLink peer" }, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    peer.deviceId.take(16),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            MeshPillBadge(text = "CONNECTED", color = MeshEmerald)
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onNavigate(MeshRoute.NETWORK_MAP) }) {
+                        Icon(Icons.Filled.Hub, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Topology")
+                    }
+                    OutlinedButton(onClick = { onNavigate(MeshRoute.DIAGNOSTICS) }) {
+                        Icon(Icons.Filled.GraphicEq, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Diagnostics")
+                    }
+                    OutlinedButton(onClick = { onNavigate(MeshRoute.ROUTING) }) {
+                        Icon(Icons.Filled.AltRoute, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Routing")
+                    }
+                }
+            }
+
             GlassPanel(accentColor = NeonCyan) {
                 SectionTitle(
                     title = "Quick Actions",
