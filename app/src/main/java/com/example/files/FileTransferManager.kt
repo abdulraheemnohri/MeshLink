@@ -40,6 +40,7 @@ class FileTransferManager(
     private val activeTransfers = ConcurrentHashMap.newKeySet<String>()
 
     init {
+        scope.launch { recoverInterruptedTransfers() }
         scope.launch {
             routingEngine.sessionEstablished.collect { peerId ->
                 val transfers = repository.transfersFlow.first()
@@ -202,6 +203,42 @@ class FileTransferManager(
             null
         }
     }
+    /** Reconcile in-flight database rows after Android kills the process. */
+    suspend fun recoverInterruptedTransfers() {
+        val transfers = repository.transfersFlow.first()
+        transfers.filter { it.status == "TRANSFERRING" }.forEach { transfer ->
+            if (transfer.isOutgoing) {
+                val source = File(transfer.localUriOrPath)
+                if (!source.isFile || source.length() != transfer.totalBytes) {
+                    repository.upsertFileTransfer(
+                        transfer.copy(status = "FAILED", updatedAt = System.currentTimeMillis())
+                    )
+                } else {
+                    val remaining = repository.getIncompleteChunks(transfer.transferId).size
+                    repository.upsertFileTransfer(
+                        transfer.copy(
+                            completedChunks = (transfer.totalChunks - remaining).coerceIn(0, transfer.totalChunks),
+                            status = "PAUSED",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+            } else {
+                val chunkDir = File(context.filesDir, "mesh_chunks/" + transfer.transferId)
+                val received = (0 until transfer.totalChunks).count { index ->
+                    File(chunkDir, "chunk_%05d.part".format(index)).isFile
+                }
+                repository.upsertFileTransfer(
+                    transfer.copy(
+                        completedChunks = received.coerceIn(0, transfer.totalChunks),
+                        status = "PAUSED",
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+    }
+
     suspend fun pauseTransfer(transferId: String) {
         pausedTransfers[transferId] = true
         pendingAcks.entries.filter { it.key.startsWith("$transferId:") }.forEach {
