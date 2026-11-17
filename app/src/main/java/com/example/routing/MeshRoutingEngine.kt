@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -53,6 +55,7 @@ class MeshRoutingEngine(
     private val crypto: MeshCryptoEngine
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val pendingFlushMutex = Mutex()
     // Keep every transport-specific locator for a peer; adapter addresses are not interchangeable.
     private val activeEndpoints = ConcurrentHashMap<String, DiscoveredEndpoint>()
     private val endpointPaths = ConcurrentHashMap<String, ConcurrentHashMap<TransportType, DiscoveredEndpoint>>()
@@ -1267,7 +1270,7 @@ class MeshRoutingEngine(
         return false
     }
 
-    suspend fun flushStoreAndForwardQueue() {
+    suspend fun flushStoreAndForwardQueue() = pendingFlushMutex.withLock {
         val pending = repository.getActivePendingPackets()
         if (pending.isEmpty() || activeEndpoints.isEmpty()) return
 
@@ -1290,9 +1293,15 @@ class MeshRoutingEngine(
                 )
             ) continue
 
-            // Persist before sending. If the process dies mid-send, the next process
-            // observes the attempt and applies backoff instead of hammering a peer.
-            repository.recordPendingPacketAttempt(entry.messageId, now)
+            // Atomically claim this exact outbox revision before sending. A second
+            // relay worker with a stale snapshot cannot send the same row concurrently.
+            val claimed = repository.claimPendingPacketAttempt(
+                messageId = entry.messageId,
+                expectedAttemptCount = entry.attemptCount,
+                expectedLastAttemptAt = entry.lastAttemptAt,
+                attemptedAt = now
+            )
+            if (!claimed) continue
             val direct = activeEndpoints[packet.destinationId]
             val dispatched = dispatchPacket(packet)
             if (dispatched) {
