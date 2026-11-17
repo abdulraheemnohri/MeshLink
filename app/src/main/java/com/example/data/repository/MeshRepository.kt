@@ -587,6 +587,10 @@ class MeshRepository(
         groupDao.updateKeyUpdateStatus(packetId, "SUPERSEDED", System.currentTimeMillis(), null)
     }
 
+    suspend fun supersedeOlderGroupKeyUpdates(groupId: String, epoch: Int) {
+        groupDao.supersedeOlderKeyUpdates(groupId, epoch, System.currentTimeMillis())
+    }
+
     suspend fun getUnresolvedGroupKeyUpdates(groupId: String): List<GroupKeyUpdateEntity> =
         groupDao.getUnresolvedKeyUpdates(groupId)
 
