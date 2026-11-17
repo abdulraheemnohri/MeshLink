@@ -98,6 +98,7 @@ fun IdentityScreen(
     val context = LocalContext.current
     var aliasDraft by remember(identity?.alias) { mutableStateOf(identity?.alias ?: "") }
     var showImportDialog by remember { mutableStateOf(false) }
+    var showQrScanner by remember { mutableStateOf(false) }
     var uriDraft by remember { mutableStateOf("") }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -175,6 +176,15 @@ fun IdentityScreen(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { showQrScanner = true },
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Scan QR with Camera")
+                    }
+                    Spacer(Modifier.height(8.dp))
                     Button(
                         onClick = { showImportDialog = true },
                         colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal),
@@ -210,6 +220,16 @@ fun IdentityScreen(
                 }
             }
         }
+    }
+
+    if (showQrScanner) {
+        QrScannerDialog(
+            onResult = { scanned ->
+                showQrScanner = false
+                onImportPeerUri(scanned)
+            },
+            onDismiss = { showQrScanner = false }
+        )
     }
 
     if (showImportDialog) {
