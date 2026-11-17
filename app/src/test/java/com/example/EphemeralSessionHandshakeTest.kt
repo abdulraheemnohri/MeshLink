@@ -3,9 +3,12 @@ package com.example
 import com.example.core.crypto.EphemeralSessionHandshake
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import java.security.KeyPairGenerator
 import java.security.spec.ECGenParameterSpec
 
+@RunWith(RobolectricTestRunner::class)
 class EphemeralSessionHandshakeTest {
     private fun identity() = KeyPairGenerator.getInstance("EC").apply {
         initialize(ECGenParameterSpec("secp256r1"))
