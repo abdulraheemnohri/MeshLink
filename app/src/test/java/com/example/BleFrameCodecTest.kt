@@ -79,9 +79,14 @@ class BleFrameCodecTest {
 
         assertNull(reassembler.accept(first[0]))
         assertNull(reassembler.accept(second[0]))
-        // The second transfer evicted the first; finish the retained transfer before
-        // sending any more first-transfer frames (which would start it again).
-        assertArrayEquals(secondPayload, reassembler.accept(second[1]))
+        // The second transfer evicted the first. Feed every remaining frame: this
+        // payload spans three frames at the selected MTU.
+        var completed: ByteArray? = null
+        second.drop(1).forEach { frame ->
+            val result = reassembler.accept(frame)
+            if (result != null) completed = result
+        }
+        assertArrayEquals(secondPayload, completed)
         // A late fragment from the evicted transfer is only an incomplete new transfer.
         assertNull(reassembler.accept(first[1]))
     }
