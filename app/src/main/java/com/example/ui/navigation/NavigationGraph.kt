@@ -248,7 +248,7 @@ fun NavigationGraph(
                 transfers = transfers,
                 onPause = { id -> viewModel.pauseTransfer(id) },
                 onResume = { id -> viewModel.resumeTransfer(id) },
-                onExport = { id -> viewModel.exportVerifiedTransfer(id) }
+                onExport = { id, uri -> viewModel.exportVerifiedTransfer(id, uri) }
             )
         }
 
