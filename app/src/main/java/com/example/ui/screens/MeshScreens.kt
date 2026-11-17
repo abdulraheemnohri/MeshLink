@@ -1,11 +1,5 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -508,17 +502,6 @@ fun NetworkMapScreen(
     settings: SettingsEntity = SettingsEntity()
 ) {
     var selectedPeer by remember { mutableStateOf<PeerEntity?>(null) }
-    val pulseTransition = rememberInfiniteTransition(label = "topology_pulse")
-    val pulseProgress by pulseTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulse_ring"
-    )
-
     val primaryColor = MaterialTheme.colorScheme.primary
     val secondaryColor = MaterialTheme.colorScheme.secondary
     val tertiaryColor = MaterialTheme.colorScheme.tertiary
@@ -579,12 +562,12 @@ fun NetworkMapScreen(
                             )
                         }
 
-                        // Expanding sonar wave
+                        // Static radar guide: avoids continuous motion and does not imply live radio ranging.
                         drawCircle(
-                            color = primaryColor.copy(alpha = (1f - pulseProgress) * 0.35f),
-                            radius = maxRadius * pulseProgress,
+                            color = primaryColor.copy(alpha = 0.22f),
+                            radius = maxRadius * 0.78f,
                             center = center,
-                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f)
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
                         )
 
                         val orbit = minOf(size.width, size.height) * 0.34f
