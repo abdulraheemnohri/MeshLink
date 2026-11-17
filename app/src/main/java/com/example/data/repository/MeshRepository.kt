@@ -343,16 +343,6 @@ class MeshRepository(
                 role = "ADMIN"
             )
         )
-        memberPeers.forEach { peer ->
-            groupDao.upsertMember(
-                GroupMemberEntity(
-                    groupId = group.groupId,
-                    peerId = peer.deviceId,
-                    peerAlias = peer.alias,
-                    role = "MEMBER"
-                )
-            )
-        }
         logSecurityEvent(
             eventType = "GROUP_KEY_GEN",
             summary = "Created $category group '${group.name}' with ${memberPeers.size + 1} members"
