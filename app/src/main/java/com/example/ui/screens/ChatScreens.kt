@@ -278,7 +278,7 @@ fun ChatsHubScreen(
                             }
                         }
 
-                        if (groups.isEmpty()) {
+                        if (visibleGroups.isEmpty()) {
                             item {
                                 GlassPanel(accentColor = ElectricTeal) {
                                     Column(
@@ -295,11 +295,11 @@ fun ChatsHubScreen(
                                         )
                                         Spacer(Modifier.height(8.dp))
                                         Text(
-                                            text = "No Community Groups Yet",
+                                            text = if (groups.isEmpty()) "No Community Groups Yet" else "No Matching Groups",
                                             style = MaterialTheme.typography.titleMedium
                                         )
                                         Text(
-                                            text = "Create an encrypted AES-256 community or event channel with offline message storage and invite codes.",
+                                            text = if (groups.isEmpty()) "Create an encrypted AES-256 community or event channel with offline message storage and verified peer invitations." else "Try another search term or category filter.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
