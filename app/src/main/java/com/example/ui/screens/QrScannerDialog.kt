@@ -115,12 +115,15 @@ private fun QrCameraPreview(
         }
     }
     val delivered = remember { AtomicBoolean(false) }
+    val active = remember { AtomicBoolean(true) }
     val executor = remember { Executors.newSingleThreadExecutor() }
 
     DisposableEffect(lifecycleOwner, previewView) {
         val providerFuture = ProcessCameraProvider.getInstance(context)
         val mainExecutor = ContextCompat.getMainExecutor(context)
+        active.set(true)
         val listener = Runnable {
+            if (!active.get()) return@Runnable
             runCatching {
                 val provider = providerFuture.get()
                 val preview = Preview.Builder().build().also {
@@ -141,10 +144,23 @@ private fun QrCameraPreview(
                     try {
                         if (!delivered.get()) {
                             val plane = image.planes.firstOrNull()
-                            if (plane != null && plane.pixelStride == 1) {
-                                val buffer = plane.buffer
-                                val bytes = ByteArray(buffer.remaining())
-                                buffer.get(bytes)
+                            if (plane != null) {
+                                val buffer = plane.buffer.duplicate()
+                                val base = buffer.position()
+                                val bytes = ByteArray(image.width * image.height)
+                                var validPlane = true
+                                for (row in 0 until image.height) {
+                                    for (column in 0 until image.width) {
+                                        val offset = base + row * plane.rowStride + column * plane.pixelStride
+                                        if (offset >= buffer.limit()) {
+                                            validPlane = false
+                                            break
+                                        }
+                                        bytes[row * image.width + column] = buffer.get(offset)
+                                    }
+                                    if (!validPlane) break
+                                }
+                                if (!validPlane) return@setAnalyzer
                                 val source = PlanarYUVLuminanceSource(
                                     bytes,
                                     image.width,
@@ -158,8 +174,8 @@ private fun QrCameraPreview(
                                 val decoded = runCatching {
                                     reader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
                                 }.getOrNull()
-                                if (!decoded.isNullOrBlank() && delivered.compareAndSet(false, true)) {
-                                    mainExecutor.execute { onResult(decoded) }
+                                if (active.get() && !decoded.isNullOrBlank() && delivered.compareAndSet(false, true)) {
+                                    mainExecutor.execute { if (active.get()) onResult(decoded) }
                                 }
                             }
                         }
@@ -178,6 +194,7 @@ private fun QrCameraPreview(
         }
         providerFuture.addListener(listener, mainExecutor)
         onDispose {
+            active.set(false)
             runCatching { providerFuture.get().unbindAll() }
             executor.shutdown()
         }
