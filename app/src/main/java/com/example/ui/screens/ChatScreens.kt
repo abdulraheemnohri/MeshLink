@@ -716,6 +716,11 @@ fun GroupChatScreen(
             title = { Text("Members (${members.size})") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Role changes are disabled until role updates can be synchronized and acknowledged by every group member.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     members.forEach { member ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -727,7 +732,7 @@ fun GroupChatScreen(
                                 Text(member.role, style = MaterialTheme.typography.labelSmall, color = NeonCyan)
                             }
                             Row {
-                                IconButton(onClick = { onToggleRole(member) }) {
+                                IconButton(onClick = { onToggleRole(member) }, enabled = false) {
                                     Icon(Icons.Filled.AdminPanelSettings, contentDescription = "Toggle role", tint = ElectricTeal)
                                 }
                                 IconButton(onClick = { onRemoveMember(member.peerId) }) {
