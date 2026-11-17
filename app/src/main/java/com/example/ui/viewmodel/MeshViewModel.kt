@@ -328,7 +328,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 ttlHoursOverride = ttlHoursOverride
             )
             if (!ok) {
-                _snackMessages.tryEmit("Encrypted & queued in Store-and-Forward DTN buffer")
+                _snackMessages.tryEmit("Message not sent. Connect to a QR-verified peer to establish a secure session, then retry.")
             }
         }
     }
