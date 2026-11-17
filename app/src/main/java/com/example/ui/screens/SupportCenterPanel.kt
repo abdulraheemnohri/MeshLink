@@ -107,7 +107,7 @@ fun SupportCenterPanel() {
                 minLines = 4,
                 maxLines = 7
             )
-            androidx.compose.material3.CheckboxRow(
+            SupportCheckboxRow(
                 checked = includeDeviceInfo,
                 onCheckedChange = { includeDeviceInfo = it },
                 label = "Include basic device and app version details"
@@ -261,7 +261,7 @@ fun SupportCenterPanel() {
 }
 
 @Composable
-private fun androidx.compose.material3.CheckboxRow(
+private fun SupportCheckboxRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     label: String
