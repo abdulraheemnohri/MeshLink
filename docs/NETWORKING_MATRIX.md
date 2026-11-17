@@ -68,3 +68,29 @@ Run each transport independently before enabling multiple transports. Use Device
 5. Report hardware capability separately from actual test status.
 6. Do not claim guaranteed emergency/public-safety delivery.
 7. Do not call a transport production-verified until its physical acceptance row has evidence attached.
+
+
+## Message connection / routing modes
+
+These modes control message delivery policy and are independent of the radio transport selector above.
+
+| Mode | Direct destination attempt | Multi-hop relay | Fan-out | Offline queue |
+|---|---|---|---|---|
+| **Direct** | Yes | No | No | No; reports failure when no direct peer path exists |
+| **Store & Forward** | Yes | Uses known route when available | No | Yes; persists until a route becomes available or packet expires |
+| **Epidemic** | Yes | Yes | All eligible unvisited active peers (group messages are restricted to verified group members) | Yes |
+| **Spray & Wait** | Yes | Yes | Bounded by remaining copy budget; remaining copies are persisted | Yes |
+| **Autonomous** | Chooses a concrete strategy at send time | Depends on selected strategy | Depends on selected strategy | Depends on selected strategy |
+
+Autonomous selection is deterministic and battery-aware:
+- Battery at or below 20%: Store & Forward.
+- Healthy battery with a directly reachable destination/member: Direct.
+- At least three active peers and no direct destination: Spray & Wait.
+- One or two active peers and no direct destination: Epidemic.
+- No active peers: Store & Forward.
+
+For group messages, Direct sends only to currently reachable, verified, unblocked group members and never relays or queues. Epidemic and Spray & Wait fan out only to group members, not arbitrary discovered peers. Group Store & Forward retains the encrypted group packet for later delivery. Group traffic remains blocked while a key epoch has unacknowledged updates.
+
+The routing mode chosen at send time is stored on the message and packet. Changing the default affects new messages, not already queued packets. A mode selection does not enable a radio: transport enablement and Automatic / Prefer / Only transport policy remain separate controls.
+
+Automated policy tests cover all five modes. Physical radio and multi-hop acceptance remains NOT RUN until verified with multiple Android devices.
