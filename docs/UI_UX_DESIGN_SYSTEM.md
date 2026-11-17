@@ -51,3 +51,16 @@ Review every route on a compact phone and a wide screen, with both light and dar
 - Replaced an ambiguous ConcurrentHashMap membership operator in group routing with explicit `containsKey`, addressing the Kotlin compiler diagnostic in the previous Android CI run.
 
 - Added a Home dashboard Quick Actions panel for peer discovery, chats, file sharing, and diagnostics, each wired to its existing navigation route and tagged for UI tests.
+
+
+## Live Network Control Center (2026-11-17)
+
+- Home dashboard now combines connected peer count, pending packet count, active transfer count, relay state, and a short connected-peer list.
+- Metrics navigate to their existing Connections, Routing, and Transfers destinations.
+- Topology, Diagnostics, and Routing shortcuts use existing screens and routes; no synthetic link graph or fabricated radio signal values are presented.
+- Relay control reuses the existing relay service callback and displays its current running state.
+- Settings now includes an 80-character search field and category filters for Security, Device, Network, and Routing. Matching results navigate to the corresponding settings sections.
+- All quick actions and settings controls include stable test tags for UI automation.
+- Accessibility baseline: meaningful icon descriptions for search, visible text labels on actions, state text alongside relay controls, and no signal-strength estimates unless supplied by a transport adapter.
+- Remaining accessibility QA: verify TalkBack traversal, large font layouts, contrast in both themes, and reduced-motion behavior on Android devices.
+- Remaining network UI work: expose measured per-transport health snapshots from the transport coordinator and build a true peer-to-peer topology from actual route/endpoint data rather than assuming every connected peer has a direct link.
