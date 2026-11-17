@@ -125,23 +125,23 @@ class NearbyConnectionsMeshTransport(
         val identity = localIdentityProvider()
         val advertising = AdvertisingOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()
         val discovering = DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()
-        client.startAdvertising(identity.deviceId, SERVICE_ID, lifecycle, advertising).await()
+        client.startAdvertising(identity.deviceId, SERVICE_ID, lifecycle, advertising).await<Void>()
         isRunning = true
         try {
-            client.startDiscovery(SERVICE_ID, discovery, discovering).await()
+            client.startDiscovery(SERVICE_ID, discovery, discovering).await<Void>()
             log("STARTED", "Nearby Connections advertising and discovery active")
         } catch (error: Exception) {
             isRunning = false
-            runCatching { client.stopDiscovery().await() }
-            runCatching { client.stopAdvertising().await() }
+            runCatching { client.stopDiscovery().await<Void>() }
+            runCatching { client.stopAdvertising().await<Void>() }
             throw error
         }
     }
 
     override suspend fun triggerDiscovery() {
         check(isRunning) { "Nearby Connections is not running" }
-        client.stopDiscovery().await()
-        client.startDiscovery(SERVICE_ID, discovery, DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()).await()
+        client.stopDiscovery().await<Void>()
+        client.startDiscovery(SERVICE_ID, discovery, DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()).await<Void>()
     }
 
     override suspend fun connect(endpoint: DiscoveredEndpoint): Boolean {
@@ -156,7 +156,7 @@ class NearbyConnectionsMeshTransport(
                     waiters.remove(endpoint.address)?.complete(false)
                 }
         }
-        return try { withTimeoutOrNull(CONNECT_TIMEOUT_MS) { waiter.await() } == true }
+        return try { withTimeoutOrNull(CONNECT_TIMEOUT_MS) { waiter.await<Void>() } == true }
         finally { waiters.remove(endpoint.address, waiter) }
     }
 
@@ -166,14 +166,14 @@ class NearbyConnectionsMeshTransport(
         if (endpointId !in authenticated) return false
         val bytes = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
         if (bytes.isEmpty() || bytes.size > MAX_FRAME_BYTES) return false
-        return runCatching { client.sendPayload(endpointId, Payload.fromBytes(bytes)).await(); true }
+        return runCatching { client.sendPayload(endpointId, Payload.fromBytes(bytes)).await<Void>(); true }
             .getOrElse { log("SEND_FAILED", it.message ?: "Nearby send failed"); false }
     }
 
     override suspend fun stop() = withContext(Dispatchers.IO) {
         isRunning = false
-        runCatching { client.stopAdvertising().await() }
-        runCatching { client.stopDiscovery().await() }
+        runCatching { client.stopAdvertising().await<Void>() }
+        runCatching { client.stopDiscovery().await<Void>() }
         runCatching { client.stopAllEndpoints() }
         waiters.values.forEach { it.complete(false) }
         waiters.clear(); requested.clear(); authenticated.clear(); identities.clear()
@@ -268,7 +268,7 @@ class NearbyConnectionsMeshTransport(
     private suspend fun sendRaw(endpointId: String, packet: MeshPacket) {
         val bytes = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
         if (bytes.isNotEmpty() && bytes.size <= MAX_FRAME_BYTES) {
-            runCatching { client.sendPayload(endpointId, Payload.fromBytes(bytes)).await() }
+            runCatching { client.sendPayload(endpointId, Payload.fromBytes(bytes)).await<Void>() }
                 .onFailure { log("HANDSHAKE_SEND_FAILED", it.message ?: "Nearby handshake send failed") }
         }
     }
