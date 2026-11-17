@@ -91,8 +91,17 @@ class BleMeshTransport(
                 null
             }
 
-            val peerId = serviceData?.let { String(it, Charsets.UTF_8) }
-                ?: device.address.replace(":", "").lowercase()
+            // Bluetooth permissions may be revoked after the scan callback is delivered.
+            // Resolve the address once and never let a SecurityException escape the framework callback.
+            val deviceAddress = try {
+                device.address
+            } catch (_: SecurityException) {
+                null
+            } ?: return
+            val advertisedId = serviceData
+                ?.let { String(it, Charsets.UTF_8).trim() }
+                ?.takeIf { it.isNotEmpty() }
+            val peerId = advertisedId ?: deviceAddress.replace(":", "").lowercase()
             val alias = deviceName ?: "BLE-${peerId.take(6)}"
 
             if (!discoveredDevices.containsKey(peerId) && discoveredDevices.size >= MAX_BLE_PEERS) {
@@ -108,7 +117,7 @@ class BleMeshTransport(
                             signingPublicKey = "",
                             agreementPublicKey = "",
                             transportType = TransportType.BLE,
-                            address = device.address,
+                            address = deviceAddress,
                             port = 0,
                             rssiDbm = result.rssi
                         )
