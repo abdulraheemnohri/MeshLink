@@ -65,13 +65,16 @@ class WifiDirectTransport(
                 WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
                     if (HardwareCapabilities.hasNearbyWifiPermission(context)) {
                         manager?.requestPeers(channel) { peers ->
+                            if (!isRunning) return@requestPeers
                             peers.deviceList.forEach { dev -> emitP2pDevice(dev) }
-                        refreshGroupClients()
+                            refreshGroupClients()
                         }
                     }
                 }
                 WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
                     manager?.requestConnectionInfo(channel) { info ->
+                        // Framework callbacks can arrive after stop() unregisters the receiver.
+                        if (!isRunning) return@requestConnectionInfo
                         groupFormed = info.groupFormed
                         isGroupOwner = if (info.groupFormed) info.isGroupOwner else null
                         groupOwnerAddress = if (info.groupFormed) info.groupOwnerAddress?.hostAddress else null
