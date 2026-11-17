@@ -108,6 +108,7 @@ fun MeshLinkApp(viewModel: MeshViewModel) {
 
         val meshSubRoutes = listOf(
             MeshRoute.DISCOVER to "Discover",
+            MeshRoute.NETWORK_CONTROL to "Network Control",
             MeshRoute.CONNECTIONS to "Connections",
             MeshRoute.NETWORK_MAP to "Topology",
             MeshRoute.BRIDGE to "Bridge"
