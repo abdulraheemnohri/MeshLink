@@ -116,3 +116,13 @@ This audit does not claim that every possible radio or network type is a native 
 The offline QR scanner now reports camera provider/startup/binding failures in the dialog and offers a retry action. The retry path recreates its image-analysis executor rather than attempting to reuse a shut-down executor. This is source-level implementation; camera behavior must still be validated on physical devices.
 
 See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for high-priority open protocol risks, including group invitation QR key exposure and the current long-lived ECDH key schedule. These are documented as release blockers, not presented as solved.
+
+
+## Security hardening update — 2026-11-17
+
+- Group QR export no longer embeds the group AES key; legacy group QR import is rejected and the group QR entry point is visibly disabled.
+- QR identity imports now start untrusted. Existing peer identities are pinned: a changed signing key, agreement key, or fingerprint for an existing device ID is rejected and recorded as a critical security event.
+- UI messaging now distinguishes local group key/member changes from actual remote key distribution or revocation.
+- Regression tests cover key-free group QR output, rejection of legacy key-bearing QR payloads, untrusted initial imports, and rejection of peer key replacement.
+
+Still open: the long-lived ECDH pairwise key schedule has not been replaced with an authenticated ephemeral session protocol. Group epoch delivery/acknowledgement is also not implemented. The above are mitigations, not a complete security protocol migration.
