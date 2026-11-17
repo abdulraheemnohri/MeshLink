@@ -347,11 +347,20 @@ class BleMeshTransport(
                 value: ByteArray
             ) {
                 val remoteAddress = bluetoothAddressOrNull(device) ?: return
+                val rejectionStatus = when {
+                    !isRunning -> BluetoothGatt.GATT_FAILURE
+                    characteristic.uuid != PACKET_CHAR_UUID -> BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED
+                    preparedWrite -> BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED
+                    offset != 0 -> BluetoothGatt.GATT_INVALID_OFFSET
+                    value.isEmpty() || value.size > MAX_GATT_FRAME_BYTES -> BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH
+                    else -> BluetoothGatt.GATT_SUCCESS
+                }
                 if (responseNeeded) {
                     runCatching {
-                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                        gattServer?.sendResponse(device, requestId, rejectionStatus, 0, null)
                     }
                 }
+                if (rejectionStatus != BluetoothGatt.GATT_SUCCESS) return
                 if (characteristic.uuid == PACKET_CHAR_UUID && offset == 0 && !preparedWrite) {
                     val reassembler = synchronized(incomingFrames) {
                         incomingFrames[remoteAddress] ?: run {
@@ -404,6 +413,7 @@ class BleMeshTransport(
         // 16 peers × 2 incomplete transfers × 256 KiB caps worst-case reassembly payloads near 8 MiB.
         private const val MAX_BLE_PEERS = 16
         private const val MAX_INCOMPLETE_TRANSFERS_PER_PEER = 2
+        private const val MAX_GATT_FRAME_BYTES = 512
         val SERVICE_UUID: UUID = UUID.fromString("7d2ea901-4f8b-4a3c-9c1e-8a6b5d4e3f01")
         val PACKET_CHAR_UUID: UUID = UUID.fromString("7d2ea902-4f8b-4a3c-9c1e-8a6b5d4e3f01")
     }
