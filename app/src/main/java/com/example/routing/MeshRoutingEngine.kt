@@ -352,7 +352,9 @@ class MeshRoutingEngine(
                     priority = MeshPacket.PRIORITY_HIGH
                 )
             )
-            repository.recordGroupKeyUpdate(group.groupId, group.keyEpoch, member.peerId, packet.messageId, "PENDING")
+            repository.recordGroupKeyUpdate(
+                group.groupId, group.keyEpoch, member.peerId, packet.messageId, "PENDING", revokedPeerId
+            )
             val deliveredNow = dispatchPacket(packet)
             val queued = repository.getPendingPacketById(packet.messageId) != null
             repository.recordGroupKeyUpdate(
