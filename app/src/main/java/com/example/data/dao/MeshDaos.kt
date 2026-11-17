@@ -116,6 +116,9 @@ interface PendingPacketDao {
     @Query("SELECT * FROM pending_packets WHERE expiresAt > :now ORDER BY priority DESC, createdAt ASC")
     suspend fun getActivePendingOnce(now: Long): List<PendingPacketEntity>
 
+    @Query("SELECT * FROM pending_packets WHERE messageId = :messageId LIMIT 1")
+    suspend fun getById(messageId: String): PendingPacketEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(packet: PendingPacketEntity)
 
