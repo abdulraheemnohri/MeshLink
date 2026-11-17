@@ -41,6 +41,17 @@ The Identity screen previously displayed QR codes and accepted pasted identity U
 - Device integrations: NFC intent bootstrap, QR identity exchange, microphone, location, biometrics and runtime permissions
 - Build: Gradle version catalog and GitHub Actions Android CI
 
+## People and trusted-peer directory
+
+The Connections screen now presents a searchable peer directory:
+- Search by peer alias, device ID or fingerprint.
+- Filter all peers, online peers, QR-verified peers or blocked peers.
+- Shows aggregate online, verified and total peer counts.
+- Empty search/filter results have an explicit state.
+- Existing verify, disconnect and block controls remain available.
+
+Filtering is performed locally over the Room-backed peer list; no network request or remote account is required. A peer marked QR-verified is a local trust flag, not a guarantee that the peer is currently reachable.
+
 ## Local user profile
 
 The app now has a local-only profile editor available from the Node navigation tabs.
