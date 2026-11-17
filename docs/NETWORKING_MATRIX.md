@@ -94,3 +94,12 @@ For group messages, Direct sends only to currently reachable, verified, unblocke
 The routing mode chosen at send time is stored on the message and packet. Changing the default affects new messages, not already queued packets. A mode selection does not enable a radio: transport enablement and Automatic / Prefer / Only transport policy remain separate controls.
 
 Automated policy tests cover all five modes. Physical radio and multi-hop acceptance remains NOT RUN until verified with multiple Android devices.
+
+
+## Lifecycle and cancellation regression focus (2026-11-17)
+
+- BLE: revoke Bluetooth permission during active GATT transfer, stop the transport, and confirm scanner/advertiser/server cleanup is attempted and client GATT is closed on timeout or cancellation.
+- Wi-Fi Aware: cancel a multi-frame send between frames and verify pending send state is empty; disable Wi-Fi Aware and verify the adapter reports standby/failure without retaining pending sends.
+- Nearby Connections: run concurrent connect callers for one endpoint, force a timeout, and verify no waiter is overwritten or left retained; cancel a send and verify cancellation reaches the caller.
+- Wi-Fi Direct: cancel a socket send and verify cancellation is not converted into a normal false delivery result.
+- These are acceptance procedures, not claims that OEM radio behavior has already been tested.
