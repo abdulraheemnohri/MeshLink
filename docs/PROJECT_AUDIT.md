@@ -135,3 +135,8 @@ See [ANDROID_RELEASE.md](ANDROID_RELEASE.md).
 | Independent security review | Not performed |
 
 Do not mark the application production-ready or multi-device verified until the acceptance scenarios and evidence in [MULTI_DEVICE_ACCEPTANCE_TESTS.md](MULTI_DEVICE_ACCEPTANCE_TESTS.md) and [TRANSPORT_ACCEPTANCE_RESULTS.md](TRANSPORT_ACCEPTANCE_RESULTS.md) are completed.
+
+
+## Foreground-service lifecycle correction (2026-11-17)
+
+The persistent mesh relay is declared only as a `connectedDevice` foreground service. It no longer requests the `dataSync` service type or its permission. Android 15+ limits background `dataSync` foreground services to six hours in a 24-hour period; that limit is incompatible with an always-on peer-to-peer relay. File-transfer packets remain handled by the connected-device relay while it is running. Validate long-running behavior on Android 15+ physical devices and confirm the foreground-service notification remains visible during background operation.
