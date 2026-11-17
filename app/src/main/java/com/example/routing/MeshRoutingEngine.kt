@@ -65,6 +65,24 @@ class MeshRoutingEngine(
     private val transportPolicy = com.example.transport.TransportPolicyManager(context)
     private val pathHealth = com.example.transport.TransportPathHealthStore(context)
 
+    init {
+        scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(30_000L)
+                val now = System.currentTimeMillis()
+                ephemeralSessionExpiry.keys.toList().forEach { peerId ->
+                    val session = getActiveEphemeralSession(peerId)
+                    val expiry = ephemeralSessionExpiry[peerId] ?: 0L
+                    if ((session == null || expiry - now <= SESSION_REKEY_LEAD_TIME_MS) &&
+                        activeEndpoints.containsKey(peerId)
+                    ) {
+                        initiateEphemeralSession(peerId, forceRekey = session != null)
+                    }
+                }
+            }
+        }
+    }
+
     private val _incomingVoice = MutableSharedFlow<VoiceIncomingClip>(extraBufferCapacity = 16)
     val incomingVoice: SharedFlow<VoiceIncomingClip> = _incomingVoice.asSharedFlow()
 
@@ -887,8 +905,8 @@ class MeshRoutingEngine(
         }
     }
 
-    private suspend fun initiateEphemeralSession(peerId: String): Boolean {
-        if (getActiveEphemeralSession(peerId) != null) return true
+    private suspend fun initiateEphemeralSession(peerId: String, forceRekey: Boolean = false): Boolean {
+        if (!forceRekey && getActiveEphemeralSession(peerId) != null) return true
         val now = System.currentTimeMillis()
         pendingEphemeralOfferExpiry.entries.removeAll { (sessionId, expiry) ->
             if (now >= expiry) {
@@ -934,7 +952,24 @@ class MeshRoutingEngine(
                 if (!peer.verifiedByQr || peer.blocked || packet.destinationId != repository.ensureInitialized().deviceId) return false
                 val offer = EphemeralSessionPacketCodec.decodeOffer(packet.encryptedPayload) ?: return false
                 if (offer.initiatorId != packet.senderId) return false
-                if (!packetReplayStore.rememberIfNew("session:${offer.sessionId}", packet.expiresAt, System.currentTimeMillis())) {
+                val now = System.currentTimeMillis()
+                pendingEphemeralOfferExpiry.entries.removeAll { (sessionId, expiry) ->
+                    if (now >= expiry) {
+                        pendingEphemeralOffers.remove(sessionId)
+                        true
+                    } else false
+                }
+                val competingOffer = pendingEphemeralOffers.values.firstOrNull {
+                    it.offer.responderId == packet.senderId
+                }
+                if (competingOffer != null) {
+                    // Both peers may reconnect or rekey at the same time. A stable session-ID
+                    // tie-break makes both sides retain the same handshake and avoids crossed keys.
+                    if (competingOffer.offer.sessionId <= offer.sessionId) return false
+                    pendingEphemeralOffers.remove(competingOffer.offer.sessionId, competingOffer)
+                    pendingEphemeralOfferExpiry.remove(competingOffer.offer.sessionId)
+                }
+                if (!packetReplayStore.rememberIfNew("session:${offer.sessionId}", packet.expiresAt, now)) {
                     repository.logSecurityEvent(
                         eventType = "SESSION_REPLAY_DROP",
                         peerId = packet.senderId,
@@ -1244,6 +1279,9 @@ class MeshRoutingEngine(
                     flushStoreAndForwardQueue()
                     if (peer.verifiedByQr && !peer.blocked) {
                         retryPendingGroupRoleUpdatesForPeer(ep.deviceId)
+                        if (getActiveEphemeralSession(ep.deviceId) == null) {
+                            initiateEphemeralSession(ep.deviceId)
+                        }
                     }
                 }
             }
@@ -1264,6 +1302,9 @@ class MeshRoutingEngine(
                     val peer = repository.getPeerById(event.peerId)
                     if (peer?.verifiedByQr == true && !peer.blocked) {
                         retryPendingGroupRoleUpdatesForPeer(event.peerId)
+                        if (getActiveEphemeralSession(event.peerId) == null) {
+                            initiateEphemeralSession(event.peerId)
+                        }
                     }
                 } else {
                     endpointPaths[event.peerId]?.remove(event.transportType)
@@ -1884,5 +1925,6 @@ class MeshRoutingEngine(
         private const val MAX_SEEN_PACKETS = 10_000
         private const val SESSION_HANDSHAKE_TTL_MS = 90_000L
         private const val EPHEMERAL_SESSION_LIFETIME_MS = 15 * 60_000L
+        private const val SESSION_REKEY_LEAD_TIME_MS = 60_000L
     }
 }
