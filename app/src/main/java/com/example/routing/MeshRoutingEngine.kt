@@ -248,7 +248,7 @@ class MeshRoutingEngine(
         }.getOrDefault(RoutingStrategy.AUTONOMOUS)
         var reachableGroupMemberCount = 0
         for (member in repository.getGroupMembersOnce(groupId)) {
-            if (member.peerId == local.deviceId || member.peerId !in activeEndpoints) continue
+            if (member.peerId == local.deviceId || !activeEndpoints.containsKey(member.peerId)) continue
             val peer = repository.getPeerById(member.peerId) ?: continue
             if (peer.verifiedByQr && !peer.blocked) reachableGroupMemberCount++
         }
