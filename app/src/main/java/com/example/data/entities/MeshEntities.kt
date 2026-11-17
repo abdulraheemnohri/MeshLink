@@ -71,7 +71,8 @@ data class GroupKeyUpdateEntity(
     val peerId: String,
     val status: String = "PENDING",
     val updatedAt: Long = System.currentTimeMillis(),
-    val acknowledgedAt: Long? = null
+    val acknowledgedAt: Long? = null,
+    val revokedPeerId: String? = null
 )
 
 @Entity(tableName = "emergency_broadcasts")
