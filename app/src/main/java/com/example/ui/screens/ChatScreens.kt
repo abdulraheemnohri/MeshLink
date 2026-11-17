@@ -682,22 +682,23 @@ fun GroupChatScreen(
             title = { Text("Invite to ${group.name}") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    QrCodePreview(content = inviteUri, sizeDp = 180.dp)
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = "Secure invitation required",
+                        tint = MeshAmber,
+                        modifier = Modifier.size(38.dp)
+                    )
+                    Text("Group QR invitations are temporarily disabled", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        text = "Invite Code: ${group.inviteCode}",
-                        style = MaterialTheme.typography.labelMedium,
+                        text = "The old QR format exposed the group encryption key to anyone who copied or photographed it. Invite a trusted peer from Manage Members instead. A recipient-specific encrypted QR invitation will return after secure key delivery is implemented.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Group ID: ${group.groupId} • Key epoch: ${group.keyEpoch}",
+                        style = MaterialTheme.typography.labelSmall,
                         color = NeonCyan
                     )
-                    OutlinedButton(
-                        onClick = {
-                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            cm.setPrimaryClip(ClipData.newPlainText("MeshLink Group Invite", inviteUri))
-                        }
-                    ) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Copy Invite URI")
-                    }
                 }
             },
             confirmButton = {
