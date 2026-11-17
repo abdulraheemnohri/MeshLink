@@ -19,6 +19,7 @@ import com.example.data.entities.RouteEntity
 import com.example.data.entities.SecurityEventEntity
 import com.example.data.entities.SettingsEntity
 import com.example.data.entities.UserSettings
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -418,6 +419,83 @@ class MeshRepository(
             eventType = "GROUP_KEY_ROTATE",
             summary = "Rotated AES-256 group key for '${existing.name}' to epoch ${existing.keyEpoch + 1}"
         )
+    }
+
+    suspend fun isGroupAdmin(groupId: String, peerId: String): Boolean =
+        groupDao.getMember(groupId, peerId)?.role == "ADMIN"
+
+    suspend fun rotateGroupKeyForDistribution(
+        groupId: String
+    ): Pair<GroupEntity, List<GroupMemberEntity>> = db.withTransaction {
+        val local = ensureInitialized()
+        require(groupDao.getMember(groupId, local.deviceId)?.role == "ADMIN") {
+            "Only a group admin can rotate the group key"
+        }
+        val existing = groupDao.getGroupById(groupId)
+            ?: throw IllegalArgumentException("Group does not exist")
+        val updated = existing.copy(
+            groupSymmetricKeyB64 = crypto.generateGroupKeyB64(),
+            keyEpoch = existing.keyEpoch + 1
+        )
+        groupDao.upsertGroup(updated)
+        logSecurityEvent(
+            eventType = "GROUP_KEY_ROTATE",
+            summary = "Created group key epoch ${updated.keyEpoch} for authenticated distribution"
+        )
+        updated to groupDao.getMembersOnce(groupId)
+    }
+
+    suspend fun removeGroupMemberAndRotate(
+        groupId: String,
+        peerId: String
+    ): Pair<GroupEntity, List<GroupMemberEntity>> = db.withTransaction {
+        val local = ensureInitialized()
+        require(groupDao.getMember(groupId, local.deviceId)?.role == "ADMIN") {
+            "Only a group admin can remove members"
+        }
+        require(peerId != local.deviceId) { "The local admin cannot remove itself" }
+        val existing = groupDao.getGroupById(groupId)
+            ?: throw IllegalArgumentException("Group does not exist")
+        require(groupDao.getMember(groupId, peerId) != null) { "Member is not in this group" }
+        groupDao.removeMember(groupId, peerId)
+        val updated = existing.copy(
+            groupSymmetricKeyB64 = crypto.generateGroupKeyB64(),
+            keyEpoch = existing.keyEpoch + 1
+        )
+        groupDao.upsertGroup(updated)
+        logSecurityEvent(
+            eventType = "GROUP_MEMBER_REMOVED_KEY_ROTATED",
+            peerId = peerId,
+            severity = "WARN",
+            summary = "Removed member locally and created epoch ${updated.keyEpoch}; distribute to remaining members"
+        )
+        updated to groupDao.getMembersOnce(groupId)
+    }
+
+    suspend fun applyGroupKeyUpdate(
+        groupId: String,
+        epoch: Int,
+        groupKeyB64: String,
+        senderId: String,
+        revokedPeerId: String?
+    ): Boolean = db.withTransaction {
+        val existing = groupDao.getGroupById(groupId) ?: return@withTransaction false
+        if (groupDao.getMember(groupId, senderId)?.role != "ADMIN") return@withTransaction false
+        if (epoch <= existing.keyEpoch || !crypto.isValidGroupKeyB64(groupKeyB64)) {
+            return@withTransaction false
+        }
+        groupDao.upsertGroup(
+            existing.copy(groupSymmetricKeyB64 = groupKeyB64, keyEpoch = epoch)
+        )
+        if (!revokedPeerId.isNullOrBlank() && revokedPeerId != senderId) {
+            groupDao.removeMember(groupId, revokedPeerId)
+        }
+        logSecurityEvent(
+            eventType = "GROUP_KEY_UPDATE_APPLIED",
+            peerId = senderId,
+            summary = "Applied authenticated group key epoch $epoch"
+        )
+        true
     }
 
     suspend fun getGroupById(groupId: String): GroupEntity? = groupDao.getGroupById(groupId)
