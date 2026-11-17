@@ -15,7 +15,7 @@ This document distinguishes source implementation, automated tests and physical-
 | Bluetooth Classic RFCOMM | Implemented | Paired-device socket transport with signed identity HELLO and nonce challenge-response | Bluetooth enabled, OS-level pairing, Nearby Devices permissions | NOT RUN |
 | Wi-Fi Direct | Implemented | Android P2P discovery and peer data path | Wi-Fi Direct hardware and Android/OEM P2P support | NOT RUN |
 | Wi-Fi Aware | Implemented | NAN discovery and data path | Android 8+ plus supported Wi-Fi Aware hardware/firmware | NOT RUN |
-| Google Nearby Connections | Implemented as optional adapter | P2P_CLUSTER advertising/discovery and framed byte payload exchange | Compatible Google Play services and Nearby permissions on both devices | NOT RUN |
+| Google Nearby Connections | Implemented as optional adapter | P2P_CLUSTER advertising/discovery and framed byte payload exchange (effective MeshLink routing cap is 32 KiB per packet) | Compatible Google Play services and Nearby permissions on both devices | NOT RUN |
 | NFC | Bootstrap only | NDEF URI identity handoff | NFC hardware and a supported NDEF tag/handoff path | NOT RUN |
 | QR | Bootstrap only | Identity QR display, PNG save/share, image import and camera scan | Camera permission for camera scanning; document picker for image import | NOT RUN |
 | Internet / cellular / WAN | No general gateway implementation | No guaranteed cross-network relay | Would require explicit relay infrastructure, NAT traversal and additional threat model | NOT APPLICABLE |
