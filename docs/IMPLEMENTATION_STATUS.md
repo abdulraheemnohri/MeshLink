@@ -296,9 +296,20 @@ The app's release keystore must remain private and outside Git. A signed release
 
 ## Database migration safety (2026-11-17)
 
-- Room schema version remains 8. The repository history confirms the initial checked-in database schema was version 3; migrations 3→4→5→6→7→8 are registered in order.
+- Room schema version is now 9. The repository history confirms the initial checked-in database schema was version 3; migrations 3→4→5→6→7→8→9 are registered in order.
 - Removed `fallbackToDestructiveMigration(dropAllTables = true)`. An unknown or unsupported upgrade path now fails closed rather than deleting the user's local identity, peers, conversations, groups, pending packets, event history or transfer metadata.
 - Enabled Room schema export and configured KSP to write schema snapshots under `app/schemas`.
-- Exposed the existing migration objects internally and added a Robolectric regression test that applies every migration from version 3 through version 8, checks the new columns/index, and verifies pre-existing settings and group-member rows survive.
+- Exposed migration objects internally and added a Robolectric regression test that applies every migration from version 3 through version 9, checks new columns/indexes, and verifies pre-existing settings and group-member rows survive. Added a Room DAO test for durable per-recipient role-update status and ACK timestamps.
 - Version 1 and 2 database schemas are not present in repository history or schema snapshots. They are deliberately not guessed. If an installation with either version exists, the app will now preserve its database and report a migration-path error instead of silently wiping it. A compatible migration requires the actual historical schema.
-- Remaining validation: run `testDebugUnitTest` and `assembleDebug` on CI; capture and commit the generated Room schema JSON for version 8; verify an upgrade using a real version-3 database fixture and an upgrade from the previous published APK. Do not call migration safety fully release-verified until those checks pass.
+- Remaining validation: run `testDebugUnitTest` and `assembleDebug` on CI; capture and commit the generated Room schema JSON for version 9; verify an upgrade using a real version-3 database fixture and an upgrade from the previous published APK. Do not call migration safety fully release-verified until those checks pass.
+
+
+## Durable group role synchronization (2026-11-17)
+
+- Added Room schema version 9 and migration 8→9 for `group_role_updates`, with indexes for group and recipient lookups.
+- Every role change now creates a durable per-recipient outbox record containing packet ID, group/epoch, recipient, target member, role, issue timestamp, delivery status and acknowledgement timestamp.
+- Delivery ACKs are correlated to the recorded intended recipient. A mismatched peer cannot mark another recipient's role update acknowledged.
+- On peer discovery/reconnection, unresolved role updates are retried. Expired queued packets can be replaced with a new packet ID while preserving the original role issue timestamp.
+- Receiver application is idempotent for an exact duplicate role update, allowing a retry to be acknowledged when the original ACK was lost. Older updates are rejected; newer role decisions and key epochs supersede stale outbox records.
+- Group messages remain blocked while either key-epoch updates or role-update records are unresolved.
+- Remaining validation: CI migration/DAO tests; two-device role promotion/demotion with lost ACK; offline member reconnect; duplicate role packet replay; epoch change during pending role delivery; and verification that stale role outbox entries are superseded without blocking group traffic indefinitely.
