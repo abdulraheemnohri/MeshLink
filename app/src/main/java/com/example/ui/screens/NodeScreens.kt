@@ -810,11 +810,14 @@ fun SettingsScreen(
                         subtitle = "Grant only the capabilities you want to use. Optional permissions are not requested automatically."
                     )
                     Spacer(Modifier.height(8.dp))
-                    val refreshSnapshot = permissionRefresh
-                    permissionGroups.forEach { group ->
-                        val missing = group.permissions.filterNot { permission ->
-                            HardwareCapabilities.hasPermission(context, permission)
+                    val permissionStates = remember(permissionRefresh, permissionGroups) {
+                        permissionGroups.map { group ->
+                            group to group.permissions.filterNot { permission ->
+                                HardwareCapabilities.hasPermission(context, permission)
+                            }
                         }
+                    }
+                    permissionStates.forEach { (group, missing) ->
                         val grantedCount = group.permissions.size - missing.size
                         val isGranted = missing.isEmpty()
                         Row(
@@ -859,7 +862,6 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (refreshSnapshot < 0) Text("")
                 }
             }
 
