@@ -640,6 +640,7 @@ fun PrivateChatScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun GroupChatScreen(
     group: GroupEntity?,
