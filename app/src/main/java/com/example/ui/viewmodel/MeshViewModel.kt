@@ -336,10 +336,14 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun sendGroupMessage(groupId: String, text: String) {
+    fun sendGroupMessage(
+        groupId: String,
+        text: String,
+        strategy: RoutingStrategy? = null
+    ) {
         if (text.isBlank()) return
         viewModelScope.launch {
-            routingEngine.sendGroupMessage(groupId, text.trim())
+            routingEngine.sendGroupMessage(groupId, text.trim(), strategy)
         }
     }
 
