@@ -10,6 +10,7 @@ import com.example.data.entities.GroupEntity
 import com.example.data.entities.GroupMemberEntity
 import com.example.data.entities.DeviceIdentity
 import com.example.data.entities.Peers
+import com.example.data.entities.PendingPacketEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -162,6 +163,29 @@ class AppDatabaseTest {
         assertEquals(0, dao.countUnacknowledgedRoleUpdates("role_group"))
         assertTrue(dao.getUnresolvedRoleUpdates("role_group").isEmpty())
         assertEquals(6789L, dao.getRoleUpdateByPacketId("role_packet_2")?.acknowledgedAt)
+    }
+
+    @Test
+    fun pendingPacketDao_persistsAttemptCountAndLastAttemptTimestamp() = runBlocking {
+        val dao = db.pendingPacketDao()
+        dao.upsert(
+            PendingPacketEntity(
+                messageId = "queued-retry",
+                destinationId = "peer-destination",
+                packetType = "MESSAGE",
+                routingStrategy = "STORE_AND_FORWARD",
+                rawPacketJson = "{}",
+                expiresAt = System.currentTimeMillis() + 60_000L
+            )
+        )
+
+        assertEquals(0, dao.getById("queued-retry")?.attemptCount)
+        assertEquals(1, dao.recordAttempt("queued-retry", 100_000L))
+        assertEquals(1, dao.recordAttempt("queued-retry", 130_000L))
+
+        val recovered = dao.getById("queued-retry")
+        assertEquals(2, recovered?.attemptCount)
+        assertEquals(130_000L, recovered?.lastAttemptAt)
     }
 
     @Test
