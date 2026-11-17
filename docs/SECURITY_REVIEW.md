@@ -11,11 +11,11 @@ This is a source-level protocol inventory, not a penetration test or formal cryp
 The versioned `EphemeralSessionHandshake` performs P-256 ephemeral ECDH authenticated by long-term ECDSA identity keys. The signed offer/response bind peer IDs, session ID, ephemeral public keys and 32-byte nonces. Both peers derive a transcript hash and HKDF-SHA-256 traffic-key schedule with distinct initiator-to-responder and responder-to-initiator AES-256-GCM keys.
 
 - `SESSION_OFFER` and `SESSION_RESPONSE` are signed control packets with a 90-second handshake expiry.
-- Session traffic keys are process-local and expire after 15 minutes. Replaced/expired key byte arrays are zeroed.
+- Session traffic keys are process-local and expire after 15 minutes. Replaced/expired key byte arrays are zeroed. A maintenance loop starts rekey negotiation 60 seconds before expiry for live peers, and verified peer discovery/reconnection triggers session establishment.
 - Private `MESSAGE` and direct `EMERGENCY_BEACON` packets use the `MLSE1:` envelope and the directional session key.
 - Messages waiting for session negotiation are stored as `WAITING_SESSION`. On successful negotiation, pending private text messages are retried automatically when a direct endpoint is available.
 - `FILE_OFFER` and `FILE_CHUNK` are encrypted with the ephemeral session key by the sender. A paused outgoing transfer is resumed when a session is established.
-- The session is not persisted. A process restart requires a fresh handshake; an expired session is renegotiated when a later send attempts to use it. There is no proactive timer-based rekey or persistent handshake state.
+- The session is not persisted. A process restart requires a fresh handshake; a maintenance loop proactively rekeys live sessions before expiry. Concurrent offers use a deterministic session-ID tie-break. Pending handshake state remains memory-only.
 - Inbound file packets still accept the legacy long-term ECDH envelope as a compatibility fallback. That fallback must be removed only after protocol-version compatibility and upgrade tests exist.
 
 ## Packet encryption matrix
@@ -71,7 +71,7 @@ Public/legacy group QR invitations containing a shared group key remain disabled
 1. Add an explicit all-member group epoch commit/recovery state machine and test the new durable role-update outbox under lost ACKs and offline reconnects.
 2. Define a versioned packet-encryption policy and migrate voice, location, group control and ACK traffic where appropriate.
 3. Decide and test a safe confidentiality policy for emergency broadcast payloads; do not imply broadcast payloads are encrypted.
-4. Add proactive session rekey, session expiry/reconnect and cross-version interoperability tests.
+4. Validate proactive session rekey, session expiry/reconnect, simultaneous-offer arbitration and cross-version interoperability on two physical devices.
 5. Remove legacy file receive decryption only after a compatibility window and upgrade tests.
 6. Add two-device cryptographic interoperability tests and three-device relay tests.
 7. Verify replay-store persistence, clock-skew behavior, packet TTL and deduplication under process restart.
