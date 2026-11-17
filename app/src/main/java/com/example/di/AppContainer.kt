@@ -11,6 +11,7 @@ import com.example.security.BiometricManager
 import com.example.transport.BleMeshTransport
 import com.example.transport.BluetoothClassicMeshTransport
 import com.example.transport.LanMeshTransport
+import com.example.transport.NearbyConnectionsMeshTransport
 import com.example.transport.WifiAwareTransport
 import com.example.transport.WifiDirectTransport
 import com.example.transport.UniversalDiscoveryCoordinator
