@@ -276,7 +276,12 @@ fun ChatsHubScreen(
                                     Text("New Community")
                                 }
                             }
-                            Text(\n                                "Group membership is added through authenticated invitations from a verified admin. Legacy QR invites containing shared keys are intentionally rejected.",\n                                style = MaterialTheme.typography.bodySmall,\n                                color = MaterialTheme.colorScheme.onSurfaceVariant\n                            )\n                        }
+                            Text(
+                                "Group membership is added through authenticated invitations from a verified admin. Legacy QR invites containing shared keys are intentionally rejected.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
                         if (visibleGroups.isEmpty()) {
                             item {
@@ -808,7 +813,20 @@ fun GroupChatScreen(
         )
     }
 
-    if (pendingRemoval != null) {\n        val target = pendingRemoval!!\n        AlertDialog(\n            onDismissRequest = { pendingRemoval = null },\n            title = { Text("Remove ${target.peerAlias}?") },\n            text = { Text("This removes the member and rotates the group encryption key. Remaining members must acknowledge the new key before group traffic resumes.") },\n            confirmButton = {\n                Button(onClick = { onRemoveMember(target.peerId); pendingRemoval = null }) { Text("Remove & rotate key") }\n            },\n            dismissButton = { TextButton(onClick = { pendingRemoval = null }) { Text("Cancel") } }\n        )\n    }\n\n    if (showMembersDialog) {
+    if (pendingRemoval != null) {
+        val target = pendingRemoval!!
+        AlertDialog(
+            onDismissRequest = { pendingRemoval = null },
+            title = { Text("Remove ${target.peerAlias}?") },
+            text = { Text("This removes the member and rotates the group encryption key. Remaining members must acknowledge the new key before group traffic resumes.") },
+            confirmButton = {
+                Button(onClick = { onRemoveMember(target.peerId); pendingRemoval = null }) { Text("Remove & rotate key") }
+            },
+            dismissButton = { TextButton(onClick = { pendingRemoval = null }) { Text("Cancel") } }
+        )
+    }
+
+    if (showMembersDialog) {
         val memberIds = members.map { it.peerId }.toSet()
         val inviteCandidates = allPeers.filter { it.verifiedByQr && !it.blocked && !memberIds.contains(it.deviceId) }
         AlertDialog(
