@@ -78,6 +78,7 @@ import com.example.transport.TransportPolicy
 import com.example.transport.TransportHealthSnapshot
 import com.example.transport.TransportSelectionMode
 import com.example.data.entities.DeviceIdentityEntity
+import com.example.data.entities.ConnectionEntity
 import com.example.data.entities.NetworkEventEntity
 import com.example.data.entities.PeerEntity
 import com.example.data.entities.PendingPacketEntity
@@ -1301,5 +1302,111 @@ private fun SettingSwitchRow(
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+fun NetworkControlCenterScreen(
+    connections: List<ConnectionEntity>,
+    transportHealth: List<TransportHealthSnapshot>,
+    pendingPackets: List<PendingPacketEntity>,
+    networkEvents: List<NetworkEventEntity>,
+    isRelayRunning: Boolean,
+    onToggleRelay: (Boolean) -> Unit,
+    onScanNow: () -> Unit,
+    onOpenConnections: () -> Unit,
+    onOpenTopology: () -> Unit,
+    onOpenDiagnostics: () -> Unit
+) {
+    val activeConnections = connections.filter { it.status == "CONNECTED" }
+    val runningTransports = transportHealth.count { it.running && it.lastError.isNullOrBlank() }
+    val recentEvents = networkEvents.sortedByDescending { it.timestamp }.take(12)
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(modifier = Modifier.widthIn(max = 820.dp).fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item {
+                GlassPanel(accentColor = ElectricTeal) {
+                    SectionTitle(title = "Live Network Control Center", subtitle = "Connected peers, transport health, relay controls and network activity")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MeshPillBadge(text = if (isRelayRunning) "Relay online" else "Relay stopped", color = if (isRelayRunning) MeshEmerald else MeshAmber)
+                        MeshPillBadge(text = "$runningTransports transports running", color = if (runningTransports > 0) NeonCyan else MeshAmber)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onScanNow, modifier = Modifier.weight(1f).testTag("control_center_scan")) { Text("Scan now") }
+                        OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.weight(1f)) { Text("Diagnostics") }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Background mesh relay", style = MaterialTheme.typography.titleSmall)
+                            Text("Relay eligible packets for trusted peers while active.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = isRelayRunning, onCheckedChange = onToggleRelay, modifier = Modifier.testTag("control_center_relay_switch"))
+                    }
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GlassPanel(modifier = Modifier.weight(1f), accentColor = MeshEmerald) {
+                        Text("Connected peers", style = MaterialTheme.typography.labelMedium)
+                        Text(activeConnections.size.toString(), style = MaterialTheme.typography.headlineMedium)
+                        TextButton(onClick = onOpenConnections) { Text("Manage") }
+                    }
+                    GlassPanel(modifier = Modifier.weight(1f), accentColor = MeshAmber) {
+                        Text("Queued packets", style = MaterialTheme.typography.labelMedium)
+                        Text(pendingPackets.size.toString(), style = MaterialTheme.typography.headlineMedium)
+                        Text("Awaiting route or delivery", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            item {
+                GlassPanel(accentColor = NeonCyan) {
+                    SectionTitle(title = "Transport health", subtitle = "Runtime state and last discovery; no invented signal readings")
+                    if (transportHealth.isEmpty()) Text("No transport health snapshots available.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    transportHealth.sortedBy { it.transportType.name }.forEach { status ->
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(status.transportType.name.replace('_', ' '), style = MaterialTheme.typography.titleSmall)
+                                MeshPillBadge(text = if (!status.lastError.isNullOrBlank()) "Error" else if (status.running) "Running" else "Stopped", color = if (!status.lastError.isNullOrBlank()) MeshCrimson else if (status.running) MeshEmerald else MeshAmber)
+                            }
+                            Text(status.lastError?.take(140) ?: status.lastDiscoveryAt?.let { "Last discovery: " + SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(it)) } ?: "No discovery timestamp reported", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+            item {
+                GlassPanel(accentColor = ElectricTeal) {
+                    SectionTitle(title = "Active connections", subtitle = "RSSI and latency shown from stored connection measurements")
+                    if (activeConnections.isEmpty()) Text("No active connections. Scan to discover nearby devices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    activeConnections.take(10).forEach { connection ->
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+                            Text(connection.peerAlias, style = MaterialTheme.typography.titleSmall)
+                            Text("${connection.transportType} · ${connection.rssiDbm} dBm · ${connection.latencyMs} ms", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    OutlinedButton(onClick = onOpenConnections, modifier = Modifier.fillMaxWidth()) { Text("Connection profiles") }
+                }
+            }
+            item {
+                GlassPanel(accentColor = MeshAmber) {
+                    SectionTitle(title = "Network event timeline", subtitle = "Recent discovery, connection, relay and acknowledgement events")
+                    if (recentEvents.isEmpty()) Text("No network events recorded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    recentEvents.forEach { event ->
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(event.eventType.replace('_', ' '), style = MaterialTheme.typography.labelLarge)
+                                Text(SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(event.timestamp)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(event.summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onOpenTopology, modifier = Modifier.weight(1f)) { Text("Topology") }
+                    OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.weight(1f)) { Text("Full diagnostics") }
+                }
+            }
+        }
     }
 }
