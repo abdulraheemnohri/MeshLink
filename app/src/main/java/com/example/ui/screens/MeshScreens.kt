@@ -651,19 +651,67 @@ fun NetworkMapScreen(
                 }
             }
 
-            if (selectedPeer != null) {
-                val peer = selectedPeer!!
+            if (peers.isNotEmpty()) {
                 GlassPanel(accentColor = ElectricTeal) {
-                    Text(
-                        text = "Inspected Node: ${peer.alias}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "ID ${peer.deviceId} • Transport ${peer.activeTransport} • Reputation ${peer.reputationScore} • Relayed ${peer.relaySuccessCount}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    SectionTitle(title = "Known nodes", subtitle = "Select a node here or tap its point on the topology")
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        peers.forEach { peer ->
+                            OutlinedButton(
+                                onClick = { selectedPeer = peer },
+                                modifier = Modifier.testTag("topology_peer_${peer.deviceId}")
+                            ) {
+                                Text(
+                                    text = (if (peer.isConnected) "● " else "○ ") + peer.alias,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                GlassPanel(accentColor = ElectricTeal) {
+                    Text("No peers discovered yet. Start discovery to populate this topology.", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+
+            selectedPeer?.let { peer ->
+                val peerRoutes = routes.filter { it.destinationId == peer.deviceId || it.nextHopId == peer.deviceId }
+                GlassPanel(accentColor = ElectricTeal) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Inspected node", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+                        TextButton(onClick = { selectedPeer = null }) { Text("Close") }
+                    }
+                    Text(peer.alias, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                    Text("Device ID: ${peer.deviceId}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(6.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        MeshPillBadge(if (peer.blocked) "BLOCKED" else if (peer.verifiedByQr) "QR VERIFIED" else "UNVERIFIED", if (peer.blocked) MeshCrimson else ElectricTeal)
+                        MeshPillBadge(if (peer.isConnected) "CONNECTED" else "OFFLINE", if (peer.isConnected) MeshEmerald else MeshAmber)
+                        MeshPillBadge(peer.activeTransport, NeonCyan)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text("Reputation ${peer.reputationScore} · Relayed ${peer.relaySuccessCount} successful / ${peer.relayDropCount} dropped", style = MaterialTheme.typography.bodySmall)
+                    Text("Fingerprint: ${peer.fingerprint}", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Routing paths (${peerRoutes.size})", style = MaterialTheme.typography.titleSmall)
+                    if (peerRoutes.isEmpty()) {
+                        Text("No persisted route currently references this peer.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        peerRoutes.forEach { route ->
+                            Text(
+                                "${route.destinationId} via ${route.nextHopId} · ${route.transportType} · ${route.hopCount} hop(s) · quality ${route.qualityScore}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(vertical = 3.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
