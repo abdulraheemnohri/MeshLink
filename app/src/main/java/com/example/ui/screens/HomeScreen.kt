@@ -187,6 +187,34 @@ fun HomeScreen(
                 }
             }
 
+            GlassPanel(accentColor = NeonCyan) {
+                SectionTitle(
+                    title = "Quick Actions",
+                    subtitle = "Jump straight into the most-used mesh workflows"
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { onNavigate(MeshRoute.DISCOVER) },
+                        modifier = Modifier.testTag("home_quick_discover")
+                    ) { Text("Discover peers") }
+                    OutlinedButton(
+                        onClick = { onNavigate(MeshRoute.CHATS) },
+                        modifier = Modifier.testTag("home_quick_chats")
+                    ) { Text("Open chats") }
+                    OutlinedButton(
+                        onClick = { onNavigate(MeshRoute.FILES) },
+                        modifier = Modifier.testTag("home_quick_files")
+                    ) { Text("Share files") }
+                    OutlinedButton(
+                        onClick = { onNavigate(MeshRoute.DIAGNOSTICS) },
+                        modifier = Modifier.testTag("home_quick_diagnostics")
+                    ) { Text("Diagnostics") }
+                }
+            }
+
             GlassPanel(accentColor = ElectricTeal) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
