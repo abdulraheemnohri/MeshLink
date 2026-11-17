@@ -151,7 +151,7 @@ class FileTransferManager(
         }
         val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
         if (!actualHash.equals(transfer.sha256, true)) {
-            repository.logSecurityEvent("EXPORT_HASH_FAIL", transfer.peerId, "ALERT", "Blocked export because verified file changed on disk: $transferId")
+            repository.logSecurityEvent(eventType = "EXPORT_HASH_FAIL", peerId = transfer.peerId, severity = "ALERT", summary = "Blocked export because verified file changed on disk: $transferId")
             return null
         }
         val safeName = transfer.fileName.substringAfterLast('/').substringAfterLast('\\')
@@ -172,7 +172,7 @@ class FileTransferManager(
             destination
         } catch (error: Exception) {
             resolver.delete(destination, null, null)
-            repository.logNetworkEvent(transfer.transportType, "FILE_EXPORT_ERR", transfer.peerId, "Could not export verified file ${transfer.fileName}: " + error.message)
+            repository.logNetworkEvent(transportType = transfer.transportType, eventType = "FILE_EXPORT_ERR", peerId = transfer.peerId, summary = "Could not export verified file ${transfer.fileName}: " + error.message)
             null
         }
     }
