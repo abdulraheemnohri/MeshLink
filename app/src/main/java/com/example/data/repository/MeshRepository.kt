@@ -459,6 +459,54 @@ class MeshRepository(
         )
     }
 
+    suspend fun updateGroupMemberRoleAndRecordOutbox(
+        groupId: String,
+        targetPeerId: String,
+        role: String,
+        expectedEpoch: Int,
+        issuedAt: Long,
+        outbox: List<GroupRoleUpdateEntity>
+    ): List<GroupRoleUpdateEntity> = db.withTransaction {
+        val local = ensureInitialized()
+        require(groupDao.getMember(groupId, local.deviceId)?.role == "ADMIN") {
+            "Only a group admin can update member roles"
+        }
+        require(role == "ADMIN" || role == "MEMBER") { "Invalid group role" }
+        require(targetPeerId != local.deviceId || role == "ADMIN") {
+            "The local admin cannot demote itself"
+        }
+        val group = groupDao.getGroupById(groupId)
+            ?: throw IllegalArgumentException("Group does not exist")
+        require(group.keyEpoch == expectedEpoch) { "Group epoch changed while preparing role update" }
+        val target = groupDao.getMember(groupId, targetPeerId)
+            ?: throw IllegalArgumentException("Group member does not exist")
+        if (target.role == "ADMIN" && role != "ADMIN") {
+            require(groupDao.countAdmins(groupId) > 1) { "Cannot demote the last group admin" }
+        }
+        require(outbox.all {
+            it.groupId == groupId &&
+                it.epoch == expectedEpoch &&
+                it.targetPeerId == targetPeerId &&
+                it.role == role &&
+                it.issuedAt == issuedAt &&
+                it.peerId != local.deviceId
+        }) { "Role outbox does not match the requested group role change" }
+        require(outbox.map { it.peerId }.distinct().size == outbox.size) {
+            "Role outbox contains duplicate recipients"
+        }
+        groupDao.updateMemberRole(groupId, targetPeerId, role, issuedAt)
+        groupDao.supersedeOlderRoleUpdatesForTarget(
+            groupId, targetPeerId, issuedAt, System.currentTimeMillis()
+        )
+        if (outbox.isNotEmpty()) groupDao.upsertRoleUpdates(outbox)
+        logSecurityEvent(
+            eventType = "GROUP_ROLE_CHANGED_LOCAL",
+            peerId = targetPeerId,
+            summary = "Atomically updated local group role and persisted ${outbox.size} per-recipient delivery records"
+        )
+        outbox
+    }
+
     suspend fun rotateGroupKey(groupId: String) {
         val local = ensureInitialized()
         require(groupDao.getMember(groupId, local.deviceId)?.role == "ADMIN") {
@@ -622,6 +670,13 @@ class MeshRepository(
 
     suspend fun markGroupRoleUpdateSuperseded(packetId: String) {
         groupDao.updateRoleUpdateStatus(packetId, "SUPERSEDED", System.currentTimeMillis(), null)
+    }
+
+    suspend fun updateGroupRoleUpdateStatus(packetId: String, status: String) {
+        require(status in setOf("PENDING", "QUEUED", "SENT", "FAILED", "SUPERSEDED")) {
+            "Invalid group role update status"
+        }
+        groupDao.updateRoleUpdateStatus(packetId, status, System.currentTimeMillis(), null)
     }
 
     suspend fun supersedeOlderGroupRoleUpdates(groupId: String, epoch: Int) {
