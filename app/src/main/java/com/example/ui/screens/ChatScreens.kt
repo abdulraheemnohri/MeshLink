@@ -611,6 +611,7 @@ fun GroupChatScreen(
                 .widthIn(max = 760.dp)
                 .fillMaxSize()
                 .padding(horizontal = 14.dp, vertical = 8.dp)
+                .imePadding()
         ) {
             GlassPanel(accentColor = ElectricTeal) {
                 Row(
@@ -655,9 +656,11 @@ fun GroupChatScreen(
             Spacer(Modifier.height(8.dp))
 
             LazyColumn(
+                state = messageListState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(messages, key = { it.messageId }) { msg ->
@@ -815,7 +818,7 @@ private fun MessageBubble(
         Column(
             modifier = Modifier
                 .widthIn(max = 320.dp)
-                .clip(RoundedCornerShape(if (msg.isOutgoing) 18.dp else 18.dp))
+                .clip(RoundedCornerShape(topStart = if (msg.isOutgoing) 18.dp else 6.dp, topEnd = if (msg.isOutgoing) 6.dp else 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
                 .background(bubbleColor)
                 .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
                 .animateContentSize()
