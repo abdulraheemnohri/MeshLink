@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.database.AppDatabase
+import com.example.data.entities.GroupKeyUpdateEntity
+import com.example.data.entities.GroupEntity
+import com.example.data.entities.GroupMemberEntity
 import com.example.data.entities.DeviceIdentity
 import com.example.data.entities.Peers
 import kotlinx.coroutines.flow.first
@@ -36,6 +39,45 @@ class AppDatabaseTest {
     @After
     fun tearDown() {
         db.close()
+    }
+
+    @Test
+    fun groupKeyUpdateDao_persistsAcknowledgementsAndRoleTimestamps() = runBlocking {
+        val dao = db.groupDao()
+        dao.upsertGroup(
+            GroupEntity(
+                groupId = "group_test",
+                name = "Test group",
+                groupSymmetricKeyB64 = "test-key",
+                createdBy = "admin"
+            )
+        )
+        dao.upsertMember(
+            GroupMemberEntity(
+                groupId = "group_test",
+                peerId = "admin",
+                peerAlias = "Admin",
+                role = "ADMIN"
+            )
+        )
+        dao.upsertKeyUpdate(
+            GroupKeyUpdateEntity(
+                packetId = "packet_epoch_2",
+                groupId = "group_test",
+                epoch = 2,
+                peerId = "member"
+            )
+        )
+
+        assertEquals(1, dao.countUnacknowledgedKeyUpdates("group_test"))
+        val acknowledgedAt = System.currentTimeMillis()
+        dao.updateKeyUpdateStatus("packet_epoch_2", "ACKED", acknowledgedAt, acknowledgedAt)
+        assertEquals(0, dao.countUnacknowledgedKeyUpdates("group_test"))
+        assertEquals("ACKED", dao.getKeyUpdateByPacketId("packet_epoch_2")?.status)
+
+        dao.updateMemberRole("group_test", "admin", "ADMIN", acknowledgedAt)
+        assertEquals(acknowledgedAt, dao.getMember("group_test", "admin")?.roleUpdatedAt)
+        assertEquals(1, dao.countAdmins("group_test"))
     }
 
     @Test
