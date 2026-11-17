@@ -69,6 +69,21 @@ class BleFrameCodecTest {
         assertArrayEquals(original, reassembler.accept(validB))
     }
 
+
+    @Test
+    fun reassemblerEvictsOldestIncompleteTransferAtConfiguredLimit() {
+        val reassembler = BleFrameCodec.Reassembler(maxTransfers = 1)
+        val first = BleFrameCodec.fragment(ByteArray(100) { 1 }, 64)
+        val secondPayload = ByteArray(100) { 2 }
+        val second = BleFrameCodec.fragment(secondPayload, 64)
+
+        assertNull(reassembler.accept(first[0]))
+        assertNull(reassembler.accept(second[0]))
+        // The first transfer was evicted to keep the per-peer in-flight budget bounded.
+        assertNull(reassembler.accept(first[1]))
+        assertArrayEquals(secondPayload, reassembler.accept(second[1]))
+    }
+
     @Test
     fun malformedFrameIsIgnored() {
         val reassembler = BleFrameCodec.Reassembler()
