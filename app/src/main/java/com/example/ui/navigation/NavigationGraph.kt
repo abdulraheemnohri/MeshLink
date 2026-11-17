@@ -224,6 +224,7 @@ fun NavigationGraph(
                 members = members,
                 allPeers = peers,
                 inviteUri = group?.let { viewModel.buildGroupInviteUri(it) } ?: "",
+                localPeerId = identity?.deviceId.orEmpty(),
                 messages = messages,
                 onSendMessage = { text -> viewModel.sendGroupMessage(groupId, text) },
                 onInvitePeer = { peer -> viewModel.invitePeerToGroup(groupId, peer) },
