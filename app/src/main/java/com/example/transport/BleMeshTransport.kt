@@ -11,6 +11,7 @@ import android.bluetooth.BluetoothGattServerCallback
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.Manifest
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
@@ -21,6 +22,8 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.ParcelUuid
 import com.example.core.crypto.LocalIdentityKeys
 import com.example.core.permissions.HardwareCapabilities
@@ -68,9 +71,23 @@ class BleMeshTransport(
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device ?: return
             val serviceData = result.scanRecord?.getServiceData(ParcelUuid(SERVICE_UUID))
-            val deviceName = runCatching {
-                if (HardwareCapabilities.hasBluetoothPermissions(context)) device.name else null
-            }.getOrNull()
+            val canReadDeviceName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                HardwareCapabilities.hasBluetoothPermissions(context)
+            }
+            // Bluetooth permissions can be revoked between the check and framework call.
+            val deviceName = if (canReadDeviceName) {
+                runCatching { device.name }
+                    .getOrElse { error ->
+                        if (error is SecurityException) null else throw error
+                    }
+            } else {
+                null
+            }
 
             val peerId = serviceData?.let { String(it, Charsets.UTF_8) }
                 ?: device.address.replace(":", "").lowercase()
