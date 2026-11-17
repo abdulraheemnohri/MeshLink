@@ -692,10 +692,16 @@ class MeshRepository(
     }
 
     suspend fun supersedeOlderGroupRoleUpdates(groupId: String, epoch: Int) {
+        val stale = groupDao.getUnresolvedRoleUpdates(groupId).filter { it.epoch < epoch }
+        stale.forEach { removePendingPacket(it.packetId) }
         groupDao.supersedeOlderRoleUpdates(groupId, epoch, System.currentTimeMillis())
     }
 
     suspend fun supersedeOlderGroupRoleUpdatesForTarget(groupId: String, targetPeerId: String, issuedAt: Long) {
+        val stale = groupDao.getUnresolvedRoleUpdates(groupId).filter {
+            it.targetPeerId == targetPeerId && it.issuedAt < issuedAt
+        }
+        stale.forEach { removePendingPacket(it.packetId) }
         groupDao.supersedeOlderRoleUpdatesForTarget(
             groupId, targetPeerId, issuedAt, System.currentTimeMillis()
         )
