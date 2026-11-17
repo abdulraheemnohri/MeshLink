@@ -327,7 +327,7 @@ fun NavigationGraph(
         composable(MeshRoute.PROFILE) {
             ProfileScreen(
                 profile = profile,
-                onProfileChange = { viewModel.saveProfile(it) },
+                onProfileChange = { viewModel.updateProfileDraft(it) },
                 onSave = { viewModel.saveProfile(profile) }
             )
         }
