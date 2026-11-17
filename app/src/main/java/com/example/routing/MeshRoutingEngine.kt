@@ -53,7 +53,7 @@ class MeshRoutingEngine(
     // Keep every transport-specific locator for a peer; adapter addresses are not interchangeable.
     private val activeEndpoints = ConcurrentHashMap<String, DiscoveredEndpoint>()
     private val endpointPaths = ConcurrentHashMap<String, ConcurrentHashMap<TransportType, DiscoveredEndpoint>>()
-    private val seenPacketCache = ConcurrentHashMap<String, Long>()
+    private val packetReplayStore = PacketReplayStore(context)
     private val transports = mutableListOf<MeshTransport>()
     private val transportPolicy = com.example.transport.TransportPolicyManager(context)
     private val pathHealth = com.example.transport.TransportPathHealthStore(context)
@@ -723,8 +723,7 @@ class MeshRoutingEngine(
         // Replay & duplicate suppression. Expired entries are pruned and the cache is bounded.
         val now = System.currentTimeMillis()
         if (packet.isExpired(now)) return
-        pruneSeenPacketCache(now)
-        if (seenPacketCache.containsKey(packet.messageId)) {
+        if (packetReplayStore.contains(packet.messageId, now)) {
             repository.logSecurityEvent(
                 eventType = "REPLAY_DROP",
                 peerId = packet.senderId,
@@ -770,7 +769,7 @@ class MeshRoutingEngine(
                 )
                 return
             }
-            rememberPacket(packet.messageId, packet.expiresAt, now)
+            packetReplayStore.rememberIfNew(packet.messageId, packet.expiresAt, now)
             val needsReply = senderPeer == null || senderPeer.signingPublicKey.isBlank()
             repository.upsertDiscoveredPeer(
                 deviceId = packet.senderId,
@@ -825,7 +824,14 @@ class MeshRoutingEngine(
             )
             return
         }
-        rememberPacket(packet.messageId, packet.expiresAt, now)
+        if (!packetReplayStore.rememberIfNew(packet.messageId, packet.expiresAt, now)) {
+            repository.logSecurityEvent(
+                eventType = "REPLAY_DROP",
+                peerId = packet.senderId,
+                summary = "Dropped concurrent duplicate/replay packet ${packet.messageId.take(8)}"
+            )
+            return
+        }
 
         val isForLocal = packet.destinationId == local.deviceId ||
             packet.destinationId == MeshPacket.BROADCAST_ID
@@ -1085,22 +1091,6 @@ class MeshRoutingEngine(
 
             else -> Unit
         }
-    }
-
-    @Synchronized
-    private fun pruneSeenPacketCache(now: Long) {
-        seenPacketCache.entries.removeIf { it.value <= now }
-        if (seenPacketCache.size > MAX_SEEN_PACKETS) {
-            val excess = seenPacketCache.size - MAX_SEEN_PACKETS
-            seenPacketCache.entries.sortedBy { it.value }.take(excess).forEach {
-                seenPacketCache.remove(it.key, it.value)
-            }
-        }
-    }
-
-    private fun rememberPacket(messageId: String, expiresAt: Long, now: Long = System.currentTimeMillis()) {
-        pruneSeenPacketCache(now)
-        if (expiresAt > now) seenPacketCache[messageId] = expiresAt
     }
 
     private suspend fun sendDeliveryAck(destinationId: String, ackForMessageId: String) {
