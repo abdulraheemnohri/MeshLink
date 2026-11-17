@@ -101,7 +101,7 @@ class WifiDirectTransport(
     override suspend fun start() {
         if (isRunning) return
         if (manager == null) return
-        channel = manager.initialize(context, Looper.getMainLooper(), null)
+        channel = channel ?: manager.initialize(context, Looper.getMainLooper(), null)
         val filter = IntentFilter().apply {
             addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
             addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
@@ -127,6 +127,33 @@ class WifiDirectTransport(
         clientRefreshJob?.cancel()
         clientRefreshJob = null
         peerIps.clear()
+        val activeChannel = channel
+        if (activeChannel != null && HardwareCapabilities.hasNearbyWifiPermission(context)) {
+            // Stop discovery and leave the P2P group when this adapter is disabled.
+            // Keep the initialized Channel so a later start() can reuse it safely.
+            runCatching {
+                manager?.stopPeerDiscovery(activeChannel, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() = Unit
+                    override fun onFailure(reason: Int) {
+                        _events.tryEmit(TransportEvent.Log(
+                            transportType, "P2P_STOP_DISCOVERY_ERR",
+                            "Wi-Fi Direct discovery stop failed ($reason)"
+                        ))
+                    }
+                })
+            }
+            runCatching {
+                manager?.removeGroup(activeChannel, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() = Unit
+                    override fun onFailure(reason: Int) {
+                        _events.tryEmit(TransportEvent.Log(
+                            transportType, "P2P_REMOVE_GROUP_ERR",
+                            "Wi-Fi Direct group removal failed ($reason)"
+                        ))
+                    }
+                })
+            }
+        }
         groupFormed = false
         isGroupOwner = null
         groupOwnerAddress = null
