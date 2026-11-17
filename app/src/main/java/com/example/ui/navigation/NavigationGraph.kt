@@ -202,6 +202,12 @@ fun NavigationGraph(
             PrivateChatScreen(
                 peer = peer,
                 messages = messages,
+                defaultStrategy = runCatching {
+                    com.example.core.protocol.RoutingStrategy.valueOf(settings.defaultRoutingStrategy)
+                }.getOrDefault(com.example.core.protocol.RoutingStrategy.AUTONOMOUS),
+                onStrategySelected = { strategy ->
+                    viewModel.updateSettings { it.copy(defaultRoutingStrategy = strategy.name) }
+                },
                 onSendMessage = { text, strategy, ttl ->
                     viewModel.sendPrivateMessage(peerId, text, strategy, ttl)
                 },
@@ -226,7 +232,15 @@ fun NavigationGraph(
                 inviteUri = group?.let { viewModel.buildGroupInviteUri(it) } ?: "",
                 localPeerId = identity?.deviceId.orEmpty(),
                 messages = messages,
-                onSendMessage = { text -> viewModel.sendGroupMessage(groupId, text) },
+                defaultStrategy = runCatching {
+                    com.example.core.protocol.RoutingStrategy.valueOf(settings.defaultRoutingStrategy)
+                }.getOrDefault(com.example.core.protocol.RoutingStrategy.AUTONOMOUS),
+                onStrategySelected = { strategy ->
+                    viewModel.updateSettings { it.copy(defaultRoutingStrategy = strategy.name) }
+                },
+                onSendMessage = { text, strategy ->
+                    viewModel.sendGroupMessage(groupId, text, strategy)
+                },
                 onInvitePeer = { peer -> viewModel.invitePeerToGroup(groupId, peer) },
                 onRemoveMember = { peerId -> viewModel.removeGroupMember(groupId, peerId) },
                 onToggleRole = { member -> viewModel.toggleGroupMemberRole(groupId, member) },
