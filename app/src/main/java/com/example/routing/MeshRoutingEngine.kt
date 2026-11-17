@@ -263,6 +263,54 @@ class MeshRoutingEngine(
         return dispatchPacket(packet)
     }
 
+    suspend fun updateGroupMemberRoleAndDistribute(groupId: String, targetPeerId: String, role: String): Pair<Int, Int> {
+        require(role == "ADMIN" || role == "MEMBER") { "Invalid group role" }
+        val local = repository.ensureInitialized()
+        val group = repository.getGroupById(groupId) ?: throw IllegalArgumentException("Group not found")
+        require(repository.isGroupAdmin(groupId, local.deviceId)) { "Only a group admin can update roles" }
+        val members = repository.getGroupMembersOnce(groupId)
+        val target = members.firstOrNull { it.peerId == targetPeerId } ?: throw IllegalArgumentException("Group member not found")
+        if (target.role == "ADMIN" && role == "MEMBER") {
+            require(members.count { it.role == "ADMIN" } > 1) { "Cannot demote the last group admin" }
+        }
+        require(targetPeerId != local.deviceId || role == "ADMIN") { "The current admin cannot demote itself" }
+        val issuedAt = System.currentTimeMillis()
+        repository.updateGroupMemberRole(groupId, targetPeerId, role)
+        val payload = JSONObject().apply {
+            put("groupId", groupId)
+            put("targetPeerId", targetPeerId)
+            put("role", role)
+            put("epoch", group.keyEpoch)
+            put("issuedAt", issuedAt)
+            put("issuer", local.deviceId)
+        }.toString()
+        val recipients = members.filter { it.peerId != local.deviceId }
+        var sent = 0
+        recipients.forEach { member ->
+            val peer = repository.getPeerById(member.peerId) ?: return@forEach
+            if (!peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) return@forEach
+            val packet = crypto.signPacket(
+                MeshPacket(
+                    senderId = local.deviceId,
+                    destinationId = member.peerId,
+                    packetType = PacketType.GROUP_MEMBER_ROLE_UPDATE,
+                    routingStrategy = RoutingStrategy.STORE_AND_FORWARD,
+                    encryptedPayload = crypto.encryptForPeer(payload, peer.agreementPublicKey, peer.ratchetCounter),
+                    visitedPeers = listOf(local.deviceId),
+                    priority = MeshPacket.PRIORITY_HIGH
+                )
+            )
+            if (dispatchPacket(packet) || repository.getPendingPacketById(packet.messageId) != null) sent++
+        }
+        repository.logSecurityEvent(
+            eventType = "GROUP_ROLE_UPDATE_DISTRIBUTION",
+            peerId = targetPeerId,
+            severity = if (sent == recipients.size) "INFO" else "WARN",
+            summary = "Distributed signed role update to " + sent + " of " + recipients.size + " group members"
+        )
+        return sent to recipients.size
+    }
+
     suspend fun rotateGroupKeyAndDistribute(groupId: String): Pair<Int, Int> {
         val (group, members) = repository.rotateGroupKeyForDistribution(groupId)
         return distributeGroupKeyUpdate(group, members, revokedPeerId = null)
@@ -1378,6 +1426,26 @@ class MeshRoutingEngine(
                 )
                 repository.joinGroupFromInvite(invite)
                 sendDeliveryAck(packet.senderId, packet.messageId)
+            }
+
+            PacketType.GROUP_MEMBER_ROLE_UPDATE -> {
+                if (senderPeer?.verifiedByQr != true || senderPeer.blocked || senderPeer.agreementPublicKey.isBlank()) return
+                val plain = crypto.decryptFromPeer(packet.encryptedPayload, senderPeer.agreementPublicKey, senderPeer.ratchetCounter) ?: return
+                val obj = runCatching { JSONObject(plain) }.getOrNull() ?: return
+                val groupId = obj.optString("groupId")
+                val targetPeerId = obj.optString("targetPeerId")
+                val role = obj.optString("role")
+                val issuer = obj.optString("issuer")
+                val epoch = obj.optInt("epoch", -1)
+                val issuedAt = obj.optLong("issuedAt", 0L)
+                if (groupId.isBlank() || targetPeerId.isBlank() || issuer != packet.senderId || issuedAt <= 0L) return
+                val applied = repository.applyGroupMemberRoleUpdate(groupId, targetPeerId, role, packet.senderId, epoch, issuedAt)
+                if (applied) {
+                    sendDeliveryAck(packet.senderId, packet.messageId)
+                    repository.logNetworkEvent(transportType = transportType.name, eventType = "GROUP_ROLE_UPDATE_APPLIED", peerId = packet.senderId, summary = "Applied signed group member role update")
+                } else {
+                    repository.logSecurityEvent(eventType = "GROUP_ROLE_UPDATE_REJECTED", peerId = packet.senderId, severity = "WARN", summary = "Rejected unauthorized, stale or invalid group role update")
+                }
             }
 
             PacketType.GROUP_KEY_UPDATE -> {
