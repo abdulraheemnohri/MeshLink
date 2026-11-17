@@ -40,3 +40,12 @@ Review every route on a compact phone and a wide screen, with both light and dar
 - Pause/resume controls are shown only for outgoing transfers, matching the manager's supported operations. Failed incoming files explain that the sender must resend them.
 - Verified state is explicitly labeled as receiver-side SHA-256 verification; unverified records continue to show a shortened digest for reference.
 - Empty and no-match states guide users back to file selection or filter adjustment.
+
+
+## Settings control-center UX update (2026-11-17)
+
+- Added a compact settings control center showing the number of enabled radio adapters and live relay-service state.
+- Added one-tap animated section navigation for Security, Appearance, Android Permissions, Radios, and Transport Policy.
+- Navigation targets use stable LazyColumn item positions and test tags for UI regression tests.
+- Existing settings remain the source of truth; the overview does not introduce duplicate preference state.
+- Replaced an ambiguous ConcurrentHashMap membership operator in group routing with explicit `containsKey`, addressing the Kotlin compiler diagnostic in the previous Android CI run.
