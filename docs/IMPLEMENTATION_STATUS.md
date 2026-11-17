@@ -14,7 +14,7 @@ This document separates implemented source code from capabilities that have been
 | Bluetooth Classic / Nearby Connections | Bluetooth Classic RFCOMM adapter is registered; explicit connect uses paired devices and authenticated identity handshake | RFCOMM still needs two-device acceptance testing; Google Nearby Connections adapter is not implemented |
 | File transfer | Chunk hashes, receiver chunk ACKs, resumable incomplete-chunk reads, final size/SHA-256 verification, bounded file size and sanitized names | Automated integration tests, restart tests, duplicate/reordered chunk tests and two-device validation |
 | Peer identity | Signed first handshake, trust-on-first-use key consistency checks, unknown non-handshake packet rejection and bidirectional endpoint mapping | QR fingerprint verification remains necessary to authenticate identity out of band; static ECDH is not forward-secret |
-| Routing | Bounded in-memory replay cache, expiry pruning, persisted remaining Spray-and-Wait budget and route-aware queue flushing | Cache is not durable across process restart; physical three-node relay tests and queue policy tests remain required |
+| Routing | Bounded SharedPreferences-backed durable packet replay store, expiry pruning, persisted remaining Spray-and-Wait budget and route-aware queue flushing | Physical three-node relay tests, queue policy tests and storage-failure behavior remain required |
 
 These entries describe source changes only. They do not mean the corresponding radio path has passed a physical-device acceptance test. Use docs/DEVICE_TEST_CHECKLIST.md to record the two-device and three-device acceptance runs.
 
