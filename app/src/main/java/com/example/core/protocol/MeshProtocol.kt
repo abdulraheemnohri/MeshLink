@@ -56,7 +56,7 @@ enum class TransportType(val label: String, val maxPayloadBytes: Int) {
     WIFI_AWARE("Wi-Fi Aware", 65536),
     HOTSPOT("Local Hotspot", 1024 * 1024),
     BLUETOOTH_CLASSIC("Bluetooth Classic", 32768),
-    NEARBY_CONNECTIONS("Google Nearby Connections", 1024 * 1024),
+    NEARBY_CONNECTIONS("Google Nearby Connections", 32 * 1024),
     BLE("Bluetooth LE", 512),
     NFC("NFC Tap", 4096),
     QR("QR Code", 2048)
