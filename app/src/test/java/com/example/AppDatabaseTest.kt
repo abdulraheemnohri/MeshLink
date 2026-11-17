@@ -73,6 +73,7 @@ class AppDatabaseTest {
         assertEquals(1, dao.countUnacknowledgedKeyUpdates("group_test"))
         val acknowledgedAt = System.currentTimeMillis()
         dao.updateKeyUpdateStatus("packet_epoch_2", "ACKED", acknowledgedAt, acknowledgedAt)
+        dao.updateKeyUpdateStatus("packet_epoch_2", "SENT", acknowledgedAt + 1, null)
         assertEquals(0, dao.countUnacknowledgedKeyUpdates("group_test"))
         assertEquals("ACKED", dao.getKeyUpdateByPacketId("packet_epoch_2")?.status)
 
