@@ -480,3 +480,11 @@ CI and physical acceptance for these latest changes are pending. Real-device ver
 - Nearby application sends and handshake sends now rethrow coroutine cancellation rather than reporting cancellation as a normal radio failure.
 - Wi-Fi Direct socket sends now preserve coroutine cancellation while still logging ordinary socket failures.
 - Automated Android CI is required to validate compilation and JVM tests. Device-level reconnection, permission-revocation and radio-toggle acceptance remain outstanding.
+
+
+## Wi-Fi Direct adapter teardown (2026-11-17)
+
+- Disabling/stopping the Wi-Fi Direct adapter now requests peer-discovery shutdown and P2P group removal when Nearby Wi-Fi permission is available.
+- Group removal and discovery shutdown failures are logged independently; cleanup of in-memory peer/group state and receiver registration continues.
+- The initialized P2P Channel is reused on a later start rather than silently creating a new channel on every stop/start cycle.
+- OEM-specific asynchronous group teardown and reconnect behavior still require physical-device acceptance.
