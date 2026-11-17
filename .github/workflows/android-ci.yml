@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: android-ci-${{ github.workflow }}-${{ github.ref }}
@@ -34,54 +34,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "9.3.1"
-
-      - name: Report toolchain
         run: |
-          java -version
-          gradle --version
-
-      - name: Generate and verify official Gradle Wrapper
-        run: |
-          gradle --no-daemon wrapper --gradle-version 9.3.1 --distribution-type bin
-          chmod +x gradlew
           ./gradlew --no-daemon --version
-
-      - name: Commit generated wrapper to main
-        id: wrapper
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          WRAPPER_DIR="$RUNNER_TEMP/meshlink-wrapper"
-          mkdir -p "$WRAPPER_DIR/gradle/wrapper"
-          cp gradlew gradlew.bat "$WRAPPER_DIR/"
-          cp gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.properties "$WRAPPER_DIR/gradle/wrapper/"
-          git fetch origin main
-          git checkout -B main origin/main
-          cp "$WRAPPER_DIR/gradlew" "$WRAPPER_DIR/gradlew.bat" .
-          cp "$WRAPPER_DIR/gradle/wrapper/gradle-wrapper.jar" "$WRAPPER_DIR/gradle/wrapper/gradle-wrapper.properties" gradle/wrapper/
-          chmod +x gradlew
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add gradlew gradlew.bat gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.properties
-          if ! git diff --cached --quiet; then
-            git commit -m "build: add official Gradle 9.3.1 wrapper"
-            git push origin main
-          fi
-          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Upload Gradle Wrapper files
-        uses: actions/upload-artifact@v4
-        with:
-          name: meshlink-gradle-wrapper
-          path: |
-            gradlew
-            gradlew.bat
-            gradle/wrapper/gradle-wrapper.jar
-            gradle/wrapper/gradle-wrapper.properties
-          if-no-files-found: error
-          retention-days: 14
 
       - name: Restore stable debug signing key or create temporary CI key
         id: debug-signing
@@ -122,32 +76,18 @@ jobs:
             exit 1
           }
 
-      - name: Commit generated Room schema snapshot to main
-        id: schema
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          SCHEMA_SOURCE="$(find app/schemas -type f -name '9.json' -print -quit)"
-          test -n "$SCHEMA_SOURCE"
-          cp "$SCHEMA_SOURCE" "$RUNNER_TEMP/room-schema-9.json"
-          rm -rf app/schemas/com.example.data.database.AppDatabase
-          git fetch origin main
-          git checkout -B main origin/main
-          mkdir -p app/schemas/com.example.data.database.AppDatabase
-          cp "$RUNNER_TEMP/room-schema-9.json" app/schemas/com.example.data.database.AppDatabase/9.json
-          git add app/schemas/com.example.data.database.AppDatabase/9.json
-          if ! git diff --cached --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "build: commit Room schema version 9 snapshot"
-            git push origin main
-          fi
-          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Upload Room schema snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: meshlink-room-schema
+          path: app/schemas/com.example.data.database.AppDatabase/9.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Write APK build information
         env:
           SIGNING_MODE: ${{ steps.debug-signing.outputs.mode }}
-          SOURCE_SHA: ${{ steps.schema.outputs.source_sha || steps.wrapper.outputs.source_sha || github.sha }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
@@ -173,3 +113,39 @@ jobs:
             app/schemas/
           if-no-files-found: error
           retention-days: 14
+
+  commit-schema:
+    name: Commit generated Room schema snapshot
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Download generated schema snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: meshlink-room-schema
+          path: ${{ runner.temp }}/room-schema
+
+      - name: Commit schema snapshot if changed
+        run: |
+          set -euo pipefail
+          SCHEMA_SOURCE="$(find "$RUNNER_TEMP/room-schema" -type f -name '9.json' -print -quit)"
+          test -n "$SCHEMA_SOURCE"
+          mkdir -p app/schemas/com.example.data.database.AppDatabase
+          cp "$SCHEMA_SOURCE" app/schemas/com.example.data.database.AppDatabase/9.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/schemas/com.example.data.database.AppDatabase/9.json
+          if ! git diff --cached --quiet; then
+            git commit -m "build: commit Room schema version 9 snapshot"
+            git push origin main
+          else
+            echo "Room schema version 9 snapshot is already current."
+          fi
