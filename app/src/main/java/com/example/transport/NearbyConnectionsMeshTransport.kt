@@ -103,8 +103,11 @@ class NearbyConnectionsMeshTransport(
 
     private val discovery = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
-            if (!isRunning || !requested.add(endpointId)) return
-            client.requestConnection(localIdentityProvider().deviceId, endpointId, lifecycle)
+            if (!isRunning) return
+            // Deterministic initiator selection prevents both peers requesting each other at once.
+            val localId = localIdentityProvider().deviceId
+            if (localId >= info.endpointName || !requested.add(endpointId)) return
+            client.requestConnection(localId, endpointId, lifecycle)
                 .addOnFailureListener {
                     requested.remove(endpointId)
                     log("REQUEST_FAILED", it.message ?: "Nearby request failed")
