@@ -9,7 +9,7 @@ This document separates implemented source code from capabilities that have been
 - Reissued updates retain the original revoked-member identifier, so a retry after member removal does not silently lose revocation semantics.
 - Older unresolved epochs are marked SUPERSEDED when a newer key epoch is distributed; only the current epoch's unresolved recipients block group messaging.
 - Recipients that are missing, unverified, blocked, or not yet connected remain unresolved and keep group messaging gated until recovery succeeds.
-- Database schema v7 adds persisted revocation metadata; migrations 3→4 through 6→7 are registered.
+- Database schema v8 adds the opt-in Nearby Connections setting; migration 7→8 is registered.
 
 ## Latest source-level implementation (not yet device-verified)
 
