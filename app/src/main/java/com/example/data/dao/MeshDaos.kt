@@ -99,6 +99,9 @@ interface GroupDao {
     @Query("SELECT * FROM group_key_updates WHERE groupId = :groupId AND status NOT IN ('ACKED', 'SUPERSEDED') ORDER BY updatedAt ASC")
     suspend fun getUnresolvedKeyUpdates(groupId: String): List<GroupKeyUpdateEntity>
 
+    @Query("UPDATE group_key_updates SET status = 'SUPERSEDED', updatedAt = :now WHERE groupId = :groupId AND epoch < :epoch AND status NOT IN ('ACKED', 'SUPERSEDED')")
+    suspend fun supersedeOlderKeyUpdates(groupId: String, epoch: Int, now: Long)
+
     @Query("SELECT COUNT(*) FROM group_key_updates WHERE groupId = :groupId AND status NOT IN ('ACKED', 'SUPERSEDED')")
     suspend fun countUnacknowledgedKeyUpdates(groupId: String): Int
 }
