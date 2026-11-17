@@ -498,6 +498,13 @@ class MeshRepository(
         require(outbox.map { it.peerId }.distinct().size == outbox.size) {
             "Role outbox contains duplicate recipients"
         }
+        val expectedRecipients = groupDao.getMembersOnce(groupId)
+            .map { it.peerId }
+            .filter { it != local.deviceId }
+            .toSet()
+        require(outbox.map { it.peerId }.toSet() == expectedRecipients) {
+            "Role outbox must include every current group member exactly once"
+        }
         groupDao.updateMemberRole(groupId, targetPeerId, role, issuedAt)
         groupDao.supersedeOlderRoleUpdatesForTarget(
             groupId, targetPeerId, issuedAt, System.currentTimeMillis()
