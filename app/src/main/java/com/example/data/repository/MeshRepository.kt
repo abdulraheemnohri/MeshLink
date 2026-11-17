@@ -628,6 +628,12 @@ class MeshRepository(
         groupDao.supersedeOlderRoleUpdates(groupId, epoch, System.currentTimeMillis())
     }
 
+    suspend fun supersedeOlderGroupRoleUpdatesForTarget(groupId: String, targetPeerId: String, issuedAt: Long) {
+        groupDao.supersedeOlderRoleUpdatesForTarget(
+            groupId, targetPeerId, issuedAt, System.currentTimeMillis()
+        )
+    }
+
     suspend fun getUnresolvedGroupRoleUpdates(groupId: String): List<GroupRoleUpdateEntity> =
         groupDao.getUnresolvedRoleUpdates(groupId)
 
