@@ -59,7 +59,8 @@ data class GroupMemberEntity(
     val peerId: String,
     val peerAlias: String,
     val role: String = "MEMBER", // ADMIN, MEMBER
-    val joinedAt: Long = System.currentTimeMillis()
+    val joinedAt: Long = System.currentTimeMillis(),
+    val roleUpdatedAt: Long = 0L
 )
 
 @Entity(tableName = "group_key_updates", indices = [androidx.room.Index(value = ["groupId"])])
