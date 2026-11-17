@@ -651,6 +651,16 @@ fun DiagnosticsScreen(
     onRunLoopbackTest: () -> Unit,
     onClearLogs: () -> Unit
 ) {
+    var eventSearch by remember { mutableStateOf("") }
+    var eventCategory by remember { mutableStateOf("ALL") }
+    val eventCategories = listOf("ALL", "DISCOVERY", "CONNECT", "RELAY_FWD", "ACK_RX", "ROUTE_UPDATE", "BRIDGE_FWD", "LOOPBACK_TEST")
+    val filteredEvents = remember(networkEvents, eventSearch, eventCategory) {
+        networkEvents.filter { event ->
+            (eventCategory == "ALL" || event.eventType.equals(eventCategory, ignoreCase = true)) &&
+                (eventSearch.isBlank() || listOf(event.summary, event.transportType, event.eventType, event.peerId.orEmpty())
+                    .any { it.contains(eventSearch.trim(), ignoreCase = true) })
+        }
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { onRefreshCapabilities() }
@@ -754,16 +764,47 @@ fun DiagnosticsScreen(
 
             item {
                 SectionTitle(
-                    title = "Network Event Console (${networkEvents.size})",
+                    title = "Network Event Console",
+                    subtitle = "${filteredEvents.size} shown · ${networkEvents.size} stored",
                     trailing = {
-                        TextButton(onClick = onClearLogs) { Text("Clear") }
+                        TextButton(onClick = onClearLogs, enabled = networkEvents.isNotEmpty()) { Text("Clear") }
                     }
                 )
+                OutlinedTextField(
+                    value = eventSearch,
+                    onValueChange = { eventSearch = it },
+                    modifier = Modifier.fillMaxWidth().testTag("diagnostics_event_search"),
+                    singleLine = true,
+                    label = { Text("Search events, peer IDs or transports") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search events") }
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    eventCategories.forEach { category ->
+                        FilterChip(
+                            selected = eventCategory == category,
+                            onClick = { eventCategory = category },
+                            label = { Text(if (category == "ALL") "All" else category.replace('_', ' ')) },
+                            modifier = Modifier.testTag("diagnostics_filter_${category.lowercase()}")
+                        )
+                    }
+                }
             }
 
-            items(networkEvents, key = { it.id }) { ev ->
+            if (filteredEvents.isEmpty()) {
+                item {
+                    GlassPanel(accentColor = ElectricTeal.copy(alpha = 0.5f)) {
+                        Text(
+                            if (networkEvents.isEmpty()) "No network events recorded yet." else "No events match this search or filter.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            items(filteredEvents, key = { it.id }) { ev ->
                 val ts = remember(ev.timestamp) {
-                    SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(ev.timestamp))
+                    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(ev.timestamp))
                 }
                 GlassPanel(accentColor = ElectricTeal.copy(alpha = 0.5f)) {
                     Row(
@@ -775,6 +816,9 @@ fun DiagnosticsScreen(
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(ev.summary, style = MaterialTheme.typography.bodySmall)
+                    if (!ev.peerId.isNullOrBlank()) {
+                        Text("Peer: ${ev.peerId}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
