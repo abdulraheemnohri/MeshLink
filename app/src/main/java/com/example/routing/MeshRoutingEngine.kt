@@ -331,10 +331,17 @@ class MeshRoutingEngine(
     ): Pair<Int, Int> {
         val local = repository.ensureInitialized()
         val recipients = members.filter { it.peerId != local.deviceId }
+        repository.supersedeOlderGroupKeyUpdates(group.groupId, group.keyEpoch)
         var queuedOrSent = 0
         recipients.forEach { member ->
-            val peer = repository.getPeerById(member.peerId) ?: return@forEach
-            if (!peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) return@forEach
+            val peer = repository.getPeerById(member.peerId)
+            if (peer == null || !peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) {
+                repository.recordGroupKeyUpdate(
+                    group.groupId, group.keyEpoch, member.peerId, UUID.randomUUID().toString(), "FAILED",
+                    revokedPeerId
+                )
+                return@forEach
+            }
             val payload = JSONObject().apply {
                 put("groupId", group.groupId)
                 put("epoch", group.keyEpoch)
