@@ -1025,6 +1025,8 @@ fun SettingsScreen(
                 }
             }
 
+            item { SupportCenterPanel() }
+
             item {
                 GlassPanel(accentColor = MeshEmerald) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
