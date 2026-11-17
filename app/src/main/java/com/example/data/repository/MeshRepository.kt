@@ -319,6 +319,9 @@ class MeshRepository(
         messageDao.upsert(message)
     }
 
+    suspend fun getPendingSessionMessages(peerId: String): List<MessageEntity> =
+        messageDao.getPendingSessionMessages(peerId, System.currentTimeMillis())
+
     suspend fun updateMessageStatus(messageId: String, status: String, deliveredAt: Long?, hopCount: Int) {
         messageDao.updateDeliveryStatus(messageId, status, deliveredAt, hopCount)
     }
