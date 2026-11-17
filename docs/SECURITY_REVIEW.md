@@ -46,8 +46,8 @@ Legacy peer encryption derives AES-GCM keys from long-lived identity agreement k
 - Group message sending is blocked while the local database contains unresolved key updates for the active group epoch.
 - Admins can retry unresolved updates for the current epoch. Older epochs are marked superseded.
 - A receiver accepts a key update only from a current group admin and only for a newer valid epoch.
-- Role updates are signed and encrypted to each peer, and receivers validate that the sender is a current admin, the epoch matches and the timestamp is newer. However, there is no durable per-recipient role-update outbox/ACK table or replayable role-distribution recovery state.
-- Group key rotation and member removal need a stronger all-member commit state machine. The current block-on-unresolved-key-update behavior is a safety guard, not proof of synchronized membership across disconnected devices.
+- Role updates are signed and encrypted to each peer, and receivers validate that the sender is a current admin, the epoch matches and the timestamp is newer. Schema version 9 adds a durable per-recipient role-update outbox with packet ID, recipient, target member, role, issue time, status and ACK timestamp. Delivery ACKs are accepted only from the intended recipient; unresolved updates are retried after peer discovery/reconnection. Exact duplicate role updates are idempotently accepted so a retry can recover a lost ACK.
+- Group key rotation and member removal still need a stronger all-member commit state machine. The block-on-unresolved-key-or-role-update behavior is a safety guard, not proof of synchronized membership across disconnected devices. Role-update retries and ACKs are now durable, but still need lost-ACK and offline-member device tests.
 
 Public/legacy group QR invitations containing a shared group key remain disabled. New invitations must be recipient-specific, encrypted to the verified recipient key, time-bounded and replay-protected.
 
@@ -68,7 +68,7 @@ Public/legacy group QR invitations containing a shared group key remain disabled
 
 ## Remaining security gates
 
-1. Add persistent, acknowledged group role-update distribution and offline recovery.
+1. Add an explicit all-member group epoch commit/recovery state machine and test the new durable role-update outbox under lost ACKs and offline reconnects.
 2. Define a versioned packet-encryption policy and migrate voice, location, group control and ACK traffic where appropriate.
 3. Decide and test a safe confidentiality policy for emergency broadcast payloads; do not imply broadcast payloads are encrypted.
 4. Add proactive session rekey, session expiry/reconnect and cross-version interoperability tests.
