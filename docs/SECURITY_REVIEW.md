@@ -86,3 +86,9 @@ A future protocol version should add authenticated per-hop route attestations or
 6. Add authenticated per-hop route attestations in a versioned protocol, then run two-device cryptographic interoperability and three-device relay tests.
 7. Verify replay-store persistence, clock-skew behavior, packet TTL and deduplication under process restart.
 8. Complete an independent security review before production claims.
+
+### Trusted-peer admission for file transfers
+
+- Outgoing file selection is rejected unless the destination peer is QR-verified, unblocked and has a pinned agreement public key.
+- Incoming file offers, chunks and acknowledgements are rejected unless the sender meets the same trust policy. This prevents an identity-discovered but not user-verified peer from consuming file-transfer storage or influencing transfer state.
+- The policy is covered by unit tests for unverified, blocked and keyless peers. Physical two-device transfer/reconnect testing remains required.
