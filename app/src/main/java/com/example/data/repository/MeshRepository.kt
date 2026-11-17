@@ -774,6 +774,10 @@ class MeshRepository(
         pendingPacketDao.upsert(packet)
     }
 
+    suspend fun recordPendingPacketAttempt(messageId: String, attemptedAt: Long = System.currentTimeMillis()) {
+        pendingPacketDao.recordAttempt(messageId, attemptedAt)
+    }
+
     suspend fun getActivePendingPackets(): List<PendingPacketEntity> =
         pendingPacketDao.getActivePendingOnce(System.currentTimeMillis())
 
