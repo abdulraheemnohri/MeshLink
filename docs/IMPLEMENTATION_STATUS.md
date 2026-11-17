@@ -261,3 +261,11 @@ The app's release keystore must remain private and outside Git. A signed release
 - Export integrity validation is extracted into `VerifiedFileIntegrity` and covered by JVM tests for exact hash/length, tampered content, length mismatch, missing files, and malformed hashes.
 - Export remains restricted to inbound `VERIFIED` transfers and Android 10+ MediaStore Downloads. Older Android versions still need a Storage Access Framework document-picker flow; do not treat this as completed until that UI path is implemented and tested.
 - The latest Android CI run is pending; compilation and unit-test success must be confirmed from GitHub Actions before calling this milestone green.
+
+### Transfer recovery, cross-version export, and completion UX
+
+- Added a Storage Access Framework `CreateDocument` export path for verified inbound files. This works on Android versions below 10 and lets the user choose the destination; it rechecks file size and SHA-256 before copying.
+- Added post-export Open and Share actions using the selected document URI with read-grant flags.
+- Added startup reconciliation for transfers left in `TRANSFERRING` after process death. Outgoing transfers are paused with acknowledged-chunk progress recalculated; incoming transfers are paused with partial chunk count reconciled so the sender can resume after reconnect.
+- Added best-effort completion notifications for both sender and receiver after final SHA-256 verification. Notifications are optional and a denied notification permission does not stop file delivery.
+- Remaining verification: run Android CI, test SAF providers and notification permission behavior on Android 10/13/17, and perform a two-device kill/relaunch/resume acceptance test. The in-memory pending-ACK waiters are intentionally recreated on reconnect; they are not persisted across process death.
