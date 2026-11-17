@@ -2,6 +2,7 @@ package com.example.ui.viewmodel
 
 import android.app.Application
 import android.net.Uri
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.MeshLinkApplication
@@ -123,6 +124,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _snackMessages = MutableSharedFlow<String>(extraBufferCapacity = 16)
     val snackMessages = _snackMessages.asSharedFlow()
+    private val _lastExportedUri = MutableStateFlow<Uri?>(null)
+    val lastExportedUri: StateFlow<Uri?> = _lastExportedUri.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -475,11 +478,35 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     fun exportVerifiedTransfer(transferId: String, destination: Uri) {
         viewModelScope.launch {
             val saved = fileManager.exportVerifiedToUri(transferId, destination)
+            if (saved) _lastExportedUri.value = destination
             _snackMessages.emit(
                 if (saved) "Verified file saved successfully"
                 else "Export failed: file is not verified or could not be copied safely"
             )
         }
+    }
+
+    fun openExportedFile() {
+        val uri = _lastExportedUri.value ?: return
+        val mime = getApplication<Application>().contentResolver.getType(uri) ?: "application/octet-stream"
+        runCatching {
+            val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            getApplication<Application>().startActivity(Intent.createChooser(intent, "Open verified file").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure { _snackMessages.tryEmit("No app can open this file type") }
+    }
+
+    fun shareExportedFile() {
+        val uri = _lastExportedUri.value ?: return
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = getApplication<Application>().contentResolver.getType(uri) ?: "application/octet-stream"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = android.content.ClipData.newUri(getApplication<Application>().contentResolver, "MeshLink file", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching {
+            getApplication<Application>().startActivity(Intent.createChooser(intent, "Share verified file").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure { _snackMessages.tryEmit("Unable to open the share sheet") }
     }
 
     fun pauseTransfer(transferId: String) {
