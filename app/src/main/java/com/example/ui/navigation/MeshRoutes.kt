@@ -22,6 +22,7 @@ object MeshRoute {
     const val ROUTING = "routing"
     const val DIAGNOSTICS = "diagnostics"
     const val SETTINGS = "settings"
+    const val PROFILE = "profile"
     const val BRIDGE = "bridge"
     const val EMERGENCY = "emergency"
 
