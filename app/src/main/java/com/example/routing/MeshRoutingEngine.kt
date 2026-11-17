@@ -242,7 +242,8 @@ class MeshRoutingEngine(
                     priority = MeshPacket.PRIORITY_HIGH
                 )
             )
-            if (dispatchPacket(packet)) queuedOrSent++
+            val deliveredNow = dispatchPacket(packet)
+            if (deliveredNow || repository.getPendingPacketById(packet.messageId) != null) queuedOrSent++
         }
         repository.logSecurityEvent(
             eventType = "GROUP_KEY_UPDATE_DISTRIBUTION",
@@ -279,7 +280,8 @@ class MeshRoutingEngine(
                 priority = MeshPacket.PRIORITY_HIGH
             )
         )
-        val queuedOrSent = dispatchPacket(packet)
+        val deliveredNow = dispatchPacket(packet)
+        val queuedOrSent = deliveredNow || repository.getPendingPacketById(packet.messageId) != null
         if (queuedOrSent) repository.addGroupMember(groupId, peer)
         return queuedOrSent
     }
