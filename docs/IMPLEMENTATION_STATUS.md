@@ -371,3 +371,18 @@ The app's release keystore must remain private and outside Git. A signed release
 - Added protocol round-trip coverage for every routing enum value and display label.
 - Transport adapter selection remains independent from routing strategy selection; selecting Nearby Connections or LAN does not silently change the DTN forwarding strategy.
 - Physical acceptance remains required to verify Direct delivery, delayed Store & Forward recovery, Epidemic duplicate suppression, Spray & Wait copy-budget behavior and Autonomous decisions across multiple phones.
+
+
+## Connection / routing mode enforcement (2026-11-17)
+
+The five message routing modes are available in private and group chat controls and persist as the default setting for new messages. This update makes their delivery semantics explicit in the routing engine:
+
+- **Direct:** one-hop only. Private messages do not fall back to known multi-hop routes, relays or offline queueing. Group messages are sent only to currently reachable verified group members; if none can be reached, the message is marked failed and the UI reports why.
+- **Store & Forward:** attempts a direct path first. Group messages are sent to one reachable verified member for subsequent relay; when no group member is reachable, the encrypted packet is persisted in the DTN queue.
+- **Epidemic:** fans out to eligible unvisited peers; group packets are restricted to verified, unblocked members of that group. Duplicate suppression and route metadata remain in force.
+- **Spray & Wait:** uses the packet's bounded remaining copy budget; group fan-out is restricted to verified, unblocked group members.
+- **Autonomous:** resolves at send time using battery level, direct reachability and available peer count. Low battery (20% or below) selects Store & Forward; otherwise direct reachability selects Direct, three or more available peers selects Spray & Wait, one or two selects Epidemic, and no peers selects Store & Forward.
+
+The pure RoutingStrategyPolicy has JVM tests for the five modes and autonomous decision boundaries. Transport selection (Automatic / Prefer / Only and per-radio enablement) remains a separate policy and is not changed by selecting a routing mode.
+
+CI and physical acceptance for these latest changes are pending. Real-device verification of group relay behavior and all five modes is still required.
