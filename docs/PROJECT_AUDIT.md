@@ -140,3 +140,8 @@ Do not mark the application production-ready or multi-device verified until the 
 ## Foreground-service lifecycle correction (2026-11-17)
 
 The persistent mesh relay is declared only as a `connectedDevice` foreground service. It no longer requests the `dataSync` service type or its permission. Android 15+ limits background `dataSync` foreground services to six hours in a 24-hour period; that limit is incompatible with an always-on peer-to-peer relay. File-transfer packets remain handled by the connected-device relay while it is running. Validate long-running behavior on Android 15+ physical devices and confirm the foreground-service notification remains visible during background operation.
+
+
+### 2026-11-17 transport lifecycle review
+
+The latest transport pass closes BLE resources independently of permission state, guarantees GATT client teardown, releases Wi-Fi Aware send waiters, prevents Nearby connect-waiter replacement, preserves cancellation through Nearby and Wi-Fi Direct sends, and records explicit device acceptance steps. Compilation and unit-test status must be read from the latest Android CI run; physical radio behavior remains unverified.
