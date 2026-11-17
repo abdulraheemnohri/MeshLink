@@ -23,6 +23,8 @@ import com.example.data.entities.RouteEntity
 import com.example.data.entities.SecurityEventEntity
 import com.example.data.entities.SettingsEntity
 import com.example.data.entities.UserSettings
+import com.example.data.profile.LocalUserProfile
+import com.example.data.profile.LocalUserProfileStore
 import com.example.location.LocalGpsFix
 import com.example.location.RelativeVector
 import com.example.security.BiometricManager
@@ -44,6 +46,9 @@ import kotlinx.coroutines.launch
 class MeshViewModel(application: Application) : AndroidViewModel(application) {
     private val container = (application as MeshLinkApplication).container
     private val repository = container.repository
+    private val profileStore = LocalUserProfileStore(application)
+    private val _profile = MutableStateFlow(profileStore.load())
+    val profile: StateFlow<LocalUserProfile> = _profile.asStateFlow()
     private val routingEngine = container.routingEngine
     private val crypto = container.crypto
     private val fileManager = container.fileTransferManager
@@ -163,6 +168,17 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             repository.updateSettings { it.copy(onboardingCompleted = true) }
             refreshCapabilities()
             startRelayService()
+        }
+    }
+
+    fun saveProfile(profile: LocalUserProfile) {
+        viewModelScope.launch {
+            runCatching { profileStore.save(profile) }
+                .onSuccess {
+                    _profile.value = it
+                    _snackMessages.tryEmit("Local profile saved")
+                }
+                .onFailure { _snackMessages.tryEmit("Could not save profile: ${it.message ?: "storage error"}") }
         }
     }
 
