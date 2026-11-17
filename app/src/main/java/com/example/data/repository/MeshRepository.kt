@@ -443,12 +443,15 @@ class MeshRepository(
         }
         require(role == "ADMIN" || role == "MEMBER") { "Invalid group role" }
         require(peerId != local.deviceId || role == "ADMIN") { "The local admin cannot demote itself" }
-        groupDao.updateMemberRole(groupId, peerId, role)
+        val target = groupDao.getMember(groupId, peerId) ?: throw IllegalArgumentException("Group member does not exist")
+        if (target.role == "ADMIN" && role != "ADMIN") {
+            require(groupDao.countAdmins(groupId) > 1) { "Cannot demote the last group admin" }
+        }
+        groupDao.updateMemberRole(groupId, peerId, role, System.currentTimeMillis())
         logSecurityEvent(
             eventType = "GROUP_ROLE_CHANGED_LOCAL",
             peerId = peerId,
-            severity = "WARN",
-            summary = "Changed group role locally only; role replication is not implemented"
+            summary = "Updated local group role; routing layer distributes the signed change"
         )
     }
 
@@ -565,6 +568,22 @@ class MeshRepository(
 
     suspend fun hasUnacknowledgedGroupKeyUpdates(groupId: String): Boolean =
         groupDao.countUnacknowledgedKeyUpdates(groupId) > 0
+
+    suspend fun getGroupMembersOnce(groupId: String): List<GroupMemberEntity> = groupDao.getMembersOnce(groupId)
+
+    suspend fun applyGroupMemberRoleUpdate(
+        groupId: String, targetPeerId: String, role: String, senderId: String, epoch: Int, issuedAt: Long
+    ): Boolean = db.withTransaction {
+        if (role !in setOf("ADMIN", "MEMBER")) return@withTransaction false
+        val group = groupDao.getGroupById(groupId) ?: return@withTransaction false
+        if (group.keyEpoch != epoch || groupDao.getMember(groupId, senderId)?.role != "ADMIN") return@withTransaction false
+        val target = groupDao.getMember(groupId, targetPeerId) ?: return@withTransaction false
+        if (issuedAt <= target.roleUpdatedAt) return@withTransaction false
+        if (target.role == "ADMIN" && role == "MEMBER" && groupDao.countAdmins(groupId) <= 1) return@withTransaction false
+        groupDao.updateMemberRole(groupId, targetPeerId, role, issuedAt)
+        logSecurityEvent(eventType = "GROUP_ROLE_UPDATE_APPLIED", peerId = senderId, summary = "Applied authenticated group member role update")
+        true
+    }
 
     suspend fun getGroupById(groupId: String): GroupEntity? = groupDao.getGroupById(groupId)
 
