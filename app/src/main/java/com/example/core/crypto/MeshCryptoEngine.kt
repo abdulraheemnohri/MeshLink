@@ -255,49 +255,20 @@ class MeshCryptoEngine(private val context: Context) {
         val createdBy: String
     )
 
+    /**
+     * Public QR invitations are disabled: embedding the group AES key in a URI turns every
+     * screenshot, clipboard entry and log into a copy of the group secret. Use an authenticated
+     * peer-to-peer invitation instead. Kept as a compatibility API and fails closed.
+     */
+    @Deprecated("Public group QR invites expose group secrets; use authenticated peer invitations")
     fun encodeGroupInviteUri(
-        groupId: String,
-        name: String,
-        description: String,
-        category: String,
-        groupKeyB64: String,
-        epoch: Int,
-        createdBy: String
-    ): String {
-        return Uri.Builder()
-            .scheme("meshlink")
-            .authority("group")
-            .appendQueryParameter("v", "1")
-            .appendQueryParameter("id", groupId)
-            .appendQueryParameter("name", name)
-            .appendQueryParameter("desc", description)
-            .appendQueryParameter("cat", category)
-            .appendQueryParameter("key", groupKeyB64)
-            .appendQueryParameter("ep", epoch.toString())
-            .appendQueryParameter("by", createdBy)
-            .build()
-            .toString()
-    }
+        groupId: String, name: String, description: String, category: String,
+        groupKeyB64: String, epoch: Int, createdBy: String
+    ): String = "meshlink://group-invite-disabled"
 
-    fun decodeGroupInviteUri(rawUri: String): GroupInvitePayload? {
-        return runCatching {
-            val uri = Uri.parse(rawUri.trim())
-            if (uri.scheme != "meshlink" || uri.host != "group") return null
-            val groupId = uri.getQueryParameter("id") ?: return null
-            val name = uri.getQueryParameter("name") ?: "Community Group"
-            val key = uri.getQueryParameter("key") ?: return null
-            GroupInvitePayload(
-                groupId = groupId,
-                name = name,
-                description = uri.getQueryParameter("desc").orEmpty(),
-                category = uri.getQueryParameter("cat") ?: "COMMUNITY",
-                groupKeyB64 = key,
-                epoch = uri.getQueryParameter("ep")?.toIntOrNull() ?: 1,
-                createdBy = uri.getQueryParameter("by") ?: "mesh"
-            )
-        }.getOrNull()
-    }
-
+    /** Legacy v1 group QR URIs contain a bearer group key and are deliberately rejected. */
+    @Deprecated("Legacy group QR invites are insecure and no longer accepted")
+    fun decodeGroupInviteUri(rawUri: String): GroupInvitePayload? = null
     private fun derivePairwiseAesKey(peerAgreementPubB64: String, ratchetCounter: Int): SecretKey {
         ensureLocalIdentity()
         val priv: PrivateKey = agreementKeyPair?.private
