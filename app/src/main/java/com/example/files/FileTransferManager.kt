@@ -166,6 +166,7 @@ class FileTransferManager(
             repository.logNetworkEvent(transportType = transfer.transportType, eventType = "FILE_EXPORT_OK", peerId = transfer.peerId, summary = "Exported verified file " + transfer.fileName + " through SAF")
             true
         } catch (error: Exception) {
+            runCatching { context.contentResolver.delete(destination, null, null) }
             repository.logNetworkEvent(transportType = transfer.transportType, eventType = "FILE_EXPORT_ERR", peerId = transfer.peerId, summary = "SAF export failed for " + transfer.fileName + ": " + error.message)
             false
         }
