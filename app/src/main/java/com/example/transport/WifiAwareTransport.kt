@@ -250,18 +250,21 @@ class WifiAwareTransport(
             val messageId = nextSendId.getAndIncrement()
             val result = CompletableDeferred<Boolean>()
             pendingSends[messageId] = result
-            val queued = runCatching {
-                sub.sendMessage(handle, messageId, frame)
-                true
-            }.getOrDefault(false)
-            if (!queued) {
-                pendingSends.remove(messageId)
-                return false
-            }
-            val sent = withTimeoutOrNull(SEND_TIMEOUT_MS) { result.await() } ?: false
-            if (!sent) {
-                pendingSends.remove(messageId)
-                return false
+            try {
+                val queued = try {
+                    sub.sendMessage(handle, messageId, frame)
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+                if (!queued) return false
+
+                val sent = withTimeoutOrNull(SEND_TIMEOUT_MS) { result.await() } ?: false
+                if (!sent) return false
+            } finally {
+                // Timeout, cancellation, stop(), and ordinary send failure must not
+                // leave a deferred permanently retained in the pending-send map.
+                pendingSends.remove(messageId, result)
             }
         }
         return true
