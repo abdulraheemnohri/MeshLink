@@ -202,7 +202,10 @@ fun TransferManagerScreen(
     transfers: List<FileTransferEntity>,
     onPause: (String) -> Unit,
     onResume: (String) -> Unit,
-    onExport: (String, Uri) -> Unit
+    onExport: (String, Uri) -> Unit,
+    lastExportedUri: Uri?,
+    onOpenExported: () -> Unit,
+    onShareExported: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("ALL") }
@@ -257,6 +260,24 @@ fun TransferManagerScreen(
                         TransferMetric("Active", activeCount.toString(), NeonCyan, Modifier.weight(1f))
                         TransferMetric("Verified", verifiedCount.toString(), MeshEmerald, Modifier.weight(1f))
                         TransferMetric("Attention", attentionCount.toString(), MeshAmber, Modifier.weight(1f))
+                    }
+                }
+            }
+            if (lastExportedUri != null) {
+                item {
+                    GlassPanel(accentColor = MeshEmerald) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Verified file saved", style = MaterialTheme.typography.titleSmall, color = MeshEmerald)
+                            Text("The exported copy is ready to open or share.", style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = onOpenExported, modifier = Modifier.weight(1f)) {
+                                    Text("Open")
+                                }
+                                Button(onClick = onShareExported, modifier = Modifier.weight(1f)) {
+                                    Text("Share")
+                                }
+                            }
+                        }
                     }
                 }
             }
