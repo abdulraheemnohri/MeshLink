@@ -634,6 +634,7 @@ fun GroupChatScreen(
     members: List<GroupMemberEntity>,
     allPeers: List<PeerEntity>,
     inviteUri: String,
+    localPeerId: String,
     messages: List<MessageEntity>,
     onSendMessage: (String) -> Unit,
     onInvitePeer: (PeerEntity) -> Unit,
@@ -655,6 +656,8 @@ fun GroupChatScreen(
     }
     var showInviteDialog by remember { mutableStateOf(false) }
     var showMembersDialog by remember { mutableStateOf(false) }
+    var pendingRemoval by remember { mutableStateOf<GroupMemberEntity?>(null) }
+    val localIsAdmin = members.any { it.peerId == localPeerId && it.role == "ADMIN" }
     val messageListState = rememberLazyListState()
     LaunchedEffect(filteredMessages.size, searchQuery) {
         if (filteredMessages.isNotEmpty()) messageListState.animateScrollToItem(filteredMessages.lastIndex)
@@ -698,10 +701,10 @@ fun GroupChatScreen(
                         ) {
                             Icon(Icons.Filled.Group, contentDescription = "Manage Members", tint = ElectricTeal)
                         }
-                        IconButton(onClick = onRotateKey) {
+                        IconButton(onClick = onRotateKey, enabled = localIsAdmin) {
                             Icon(Icons.Filled.Key, contentDescription = "Rotate Group Key", tint = MeshAmber)
                         }
-                        IconButton(onClick = onRetryKeyUpdates) {
+                        IconButton(onClick = onRetryKeyUpdates, enabled = localIsAdmin) {
                             Icon(Icons.Filled.Refresh, contentDescription = "Retry Pending Group Key Updates", tint = ElectricTeal)
                         }
                     }
@@ -805,7 +808,7 @@ fun GroupChatScreen(
         )
     }
 
-    if (showMembersDialog) {
+    if (pendingRemoval != null) {\n        val target = pendingRemoval!!\n        AlertDialog(\n            onDismissRequest = { pendingRemoval = null },\n            title = { Text("Remove ${target.peerAlias}?") },\n            text = { Text("This removes the member and rotates the group encryption key. Remaining members must acknowledge the new key before group traffic resumes.") },\n            confirmButton = {\n                Button(onClick = { onRemoveMember(target.peerId); pendingRemoval = null }) { Text("Remove & rotate key") }\n            },\n            dismissButton = { TextButton(onClick = { pendingRemoval = null }) { Text("Cancel") } }\n        )\n    }\n\n    if (showMembersDialog) {
         val memberIds = members.map { it.peerId }.toSet()
         val inviteCandidates = allPeers.filter { it.verifiedByQr && !it.blocked && !memberIds.contains(it.deviceId) }
         AlertDialog(
@@ -814,7 +817,7 @@ fun GroupChatScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        "Only administrators can change roles or remove members. Updates are authenticated and delivered to members when their devices reconnect.",
+                        if (localIsAdmin) "You are a group administrator. Role changes and removals are authenticated; key updates reach offline members when they reconnect." else "You have member access. Only administrators can invite, change roles, remove members or rotate the group key.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -829,10 +832,10 @@ fun GroupChatScreen(
                                 Text(member.role, style = MaterialTheme.typography.labelSmall, color = NeonCyan)
                             }
                             Row {
-                                IconButton(onClick = { onToggleRole(member) }, enabled = member.role != "ADMIN" || members.count { it.role == "ADMIN" } > 1) {
+                                IconButton(onClick = { onToggleRole(member) }, enabled = localIsAdmin && (member.role != "ADMIN" || members.count { it.role == "ADMIN" } > 1)) {
                                     Icon(Icons.Filled.AdminPanelSettings, contentDescription = "Toggle role", tint = ElectricTeal)
                                 }
-                                IconButton(onClick = { onRemoveMember(member.peerId) }) {
+                                IconButton(onClick = { pendingRemoval = member }, enabled = localIsAdmin && member.peerId != localPeerId) {
                                     Icon(Icons.Filled.PersonRemove, contentDescription = "Remove member", tint = MeshCrimson)
                                 }
                             }
@@ -848,7 +851,7 @@ fun GroupChatScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(peer.alias, style = MaterialTheme.typography.bodySmall)
-                                IconButton(onClick = { onInvitePeer(peer) }) {
+                                IconButton(onClick = { onInvitePeer(peer) }, enabled = localIsAdmin) {
                                     Icon(Icons.Filled.PersonAdd, contentDescription = "Invite peer", tint = MeshEmerald)
                                 }
                             }
