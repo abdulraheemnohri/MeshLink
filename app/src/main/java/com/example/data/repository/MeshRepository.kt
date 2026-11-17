@@ -788,10 +788,6 @@ class MeshRepository(
     suspend fun getPendingPacketById(messageId: String): PendingPacketEntity? =
         pendingPacketDao.getById(messageId)
 
-    suspend fun recordPendingPacketAttempt(messageId: String, attemptedAt: Long = System.currentTimeMillis()) {
-        pendingPacketDao.recordAttempt(messageId, attemptedAt)
-    }
-
     suspend fun removePendingPacket(messageId: String) {
         pendingPacketDao.deleteById(messageId)
     }
