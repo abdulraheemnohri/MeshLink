@@ -11,6 +11,16 @@ This document separates implemented source code from capabilities that have been
 - Recipients that are missing, unverified, blocked, or not yet connected remain unresolved and keep group messaging gated until recovery succeeds.
 - Database schema v8 adds the opt-in Nearby Connections setting; migration 7→8 is registered.
 
+## Android permission coverage
+
+- Settings now includes an Android Permission Manager with separate on-demand requests and live granted/missing counts for Camera, Bluetooth / Nearby Devices, Nearby Wi-Fi, Location, Microphone and Notifications.
+- Radio startup permission lists are separate from optional feature permissions: relay startup does not require camera, microphone or notification permission.
+- Manifest declarations cover Internet/network state, Wi-Fi controls, Bluetooth legacy and Android 12+ permissions, Nearby Wi-Fi, camera, location, microphone/audio routing, NFC, notifications, foreground services, wake lock and biometric use.
+- NFC, biometric, network, wake-lock and foreground-service declarations are system-managed or normal permissions; they do not appear as runtime permission prompts.
+- File access uses Android's Storage Access Framework document picker; broad storage/media permissions are intentionally not requested.
+- Background location, contacts, SMS, call logs and broad storage access are intentionally absent because current MeshLink features do not justify them.
+- Permission requests are optional and user initiated. Denied permissions leave their associated feature unavailable rather than silently granting access.
+
 ## Latest source-level implementation (not yet device-verified)
 
 | Area | Current source state | Remaining verification / limitation |
