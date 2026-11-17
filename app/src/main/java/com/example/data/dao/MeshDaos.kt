@@ -11,6 +11,7 @@ import com.example.data.entities.FileTransferEntity
 import com.example.data.entities.GroupEntity
 import com.example.data.entities.GroupMemberEntity
 import com.example.data.entities.GroupKeyUpdateEntity
+import com.example.data.entities.GroupRoleUpdateEntity
 import com.example.data.entities.MessageEntity
 import com.example.data.entities.NetworkEventEntity
 import com.example.data.entities.PendingPacketEntity
@@ -104,6 +105,27 @@ interface GroupDao {
 
     @Query("SELECT COUNT(*) FROM group_key_updates WHERE groupId = :groupId AND status NOT IN ('ACKED', 'SUPERSEDED')")
     suspend fun countUnacknowledgedKeyUpdates(groupId: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertRoleUpdate(update: GroupRoleUpdateEntity)
+
+    @Query("SELECT * FROM group_role_updates WHERE packetId = :packetId LIMIT 1")
+    suspend fun getRoleUpdateByPacketId(packetId: String): GroupRoleUpdateEntity?
+
+    @Query("UPDATE group_role_updates SET status = :status, updatedAt = :now, acknowledgedAt = :acknowledgedAt WHERE packetId = :packetId")
+    suspend fun updateRoleUpdateStatus(packetId: String, status: String, now: Long, acknowledgedAt: Long?)
+
+    @Query("SELECT * FROM group_role_updates WHERE groupId = :groupId AND status NOT IN ('ACKED', 'SUPERSEDED') ORDER BY updatedAt ASC")
+    suspend fun getUnresolvedRoleUpdates(groupId: String): List<GroupRoleUpdateEntity>
+
+    @Query("SELECT * FROM group_role_updates WHERE peerId = :peerId AND status NOT IN ('ACKED', 'SUPERSEDED') ORDER BY updatedAt ASC")
+    suspend fun getUnresolvedRoleUpdatesForPeer(peerId: String): List<GroupRoleUpdateEntity>
+
+    @Query("UPDATE group_role_updates SET status = 'SUPERSEDED', updatedAt = :now WHERE groupId = :groupId AND epoch < :epoch AND status NOT IN ('ACKED', 'SUPERSEDED')")
+    suspend fun supersedeOlderRoleUpdates(groupId: String, epoch: Int, now: Long)
+
+    @Query("SELECT COUNT(*) FROM group_role_updates WHERE groupId = :groupId AND status NOT IN ('ACKED', 'SUPERSEDED')")
+    suspend fun countUnacknowledgedRoleUpdates(groupId: String): Int
 }
 
 @Dao
