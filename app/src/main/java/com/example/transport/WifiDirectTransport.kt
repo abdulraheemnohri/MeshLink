@@ -16,6 +16,7 @@ import com.example.core.permissions.HardwareCapabilities
 import com.example.core.protocol.MeshPacket
 import com.example.core.protocol.MeshPacketCodec
 import com.example.core.protocol.TransportType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -200,7 +201,7 @@ class WifiDirectTransport(
             groupOwnerAddress?.takeIf(::isValidIpv4) ?: return false
         }
         return withContext(Dispatchers.IO) {
-            runCatching {
+            try {
                 val encoded = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
                 if (encoded.size !in 1..2 * 1024 * 1024) return@withContext false
                 Socket().use { socket ->
@@ -212,15 +213,18 @@ class WifiDirectTransport(
                     out.flush()
                     DataInputStream(socket.getInputStream()).readUnsignedByte() == 1
                 }
-            }.onFailure { error ->
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
                 _events.tryEmit(
                     TransportEvent.Log(
                         transportType = transportType,
                         eventType = "P2P_TX_ERR",
-                        message = "Wi-Fi Direct send to $targetIp failed: ${error.message}"
+                        message = "Wi-Fi Direct send to $targetIp failed: ${failure.message}"
                     )
                 )
-            }.getOrDefault(false)
+                false
+            }
         }
     }
 
