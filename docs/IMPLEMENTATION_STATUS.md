@@ -335,3 +335,13 @@ The app's release keystore must remain private and outside Git. A signed release
 - Added JVM regression tests for hop decrement, visited-path loop rejection, destination stop and next-hop filtering.
 - Expanded the multi-device acceptance plan with simultaneous session negotiation, durable role ACK recovery, session process-death recovery and TTL/loop abuse scenarios.
 - Remaining validation: run Android CI and then execute the physical transport and A-B-C relay tests. The code-level policy tests do not prove RF interoperability or end-to-end relay behavior.
+
+
+## Release engineering preparation (2026-11-17)
+
+- Added a tag-triggered signed APK release workflow. It restores a release keystore from GitHub Actions secrets outside the repository, builds `assembleRelease`, verifies the APK with `apksigner`, extracts package/version metadata from the APK, records SHA-256 and publishes the APK plus verification evidence.
+- Release signing key alias is configurable through `KEY_ALIAS`; the application ID remains fixed for upgrade compatibility.
+- Added ignore rules for JKS, keystore, PKCS#12 and PFX signing material.
+- Added `docs/ANDROID_RELEASE.md` with required secrets, tag/version policy, signature verification and upgrade warnings.
+- The release workflow has not been exercised with production signing secrets or a real tag. No signed production APK is claimed.
+- Gradle Wrapper remains incomplete: only `gradle-wrapper.properties` exists; the official wrapper JAR and `gradlew` / `gradlew.bat` are absent. CI installs Gradle 9.3.1 directly. Add the official wrapper artifacts before claiming one-command local wrapper builds.
