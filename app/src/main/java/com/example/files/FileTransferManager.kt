@@ -419,7 +419,9 @@ class FileTransferManager(
             sendFileAck(senderId, transferId, -1)
         } else if (kind == "CHUNK") {
             val transfer = repository.getFileTransferById(transferId) ?: return
-            if (transfer.isOutgoing || transfer.peerId != senderId || transfer.status !in setOf("TRANSFERRING", "PAUSED")) return
+            if (transfer.isOutgoing || transfer.peerId != senderId ||
+                transfer.status !in setOf("TRANSFERRING", "PAUSED", "VERIFIED")
+            ) return
             val index = payload.optInt("index", -1)
             val expectedChunkSha = payload.optString("chunkSha256", "")
             val dataB64 = payload.optString("data", "")
@@ -436,6 +438,26 @@ class FileTransferManager(
                     severity = "WARN",
                     summary = "Chunk $index SHA-256 mismatch on transfer $transferId"
                 )
+                return
+            }
+
+            // A chunk ACK or final ACK may be lost after the receiver has committed
+            // the verified file. Re-ack only byte-identical chunks from that file.
+            // This makes retransmission idempotent without reopening a verified file
+            // to modification by a later packet.
+            if (transfer.status == "VERIFIED") {
+                val offset = index.toLong() * CHUNK_SIZE
+                if (VerifiedFileChunk.matches(File(transfer.localUriOrPath), offset, bytes)) {
+                    sendFileAck(senderId, transferId, index)
+                    sendFileAck(senderId, transferId, -2)
+                } else {
+                    repository.logSecurityEvent(
+                        eventType = "VERIFIED_CHUNK_REPLAY_MISMATCH",
+                        peerId = senderId,
+                        severity = "ALERT",
+                        summary = "Rejected non-matching retransmitted chunk $index for verified transfer $transferId"
+                    )
+                }
                 return
             }
 
