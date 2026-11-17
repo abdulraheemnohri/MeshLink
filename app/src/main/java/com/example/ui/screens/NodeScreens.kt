@@ -640,6 +640,7 @@ fun RoutingScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DiagnosticsScreen(
     capabilities: HardwareCapabilityReport,
