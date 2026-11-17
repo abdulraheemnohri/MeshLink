@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import com.example.core.crypto.MeshCryptoEngine
 import com.example.core.crypto.EphemeralSessionHandshake
+import com.example.core.crypto.shouldAcceptIncomingSessionOffer
 import com.example.core.protocol.MeshPacket
 import com.example.core.protocol.MeshPacketCodec
 import com.example.core.protocol.PacketType
@@ -965,7 +966,7 @@ class MeshRoutingEngine(
                 if (competingOffer != null) {
                     // Both peers may reconnect or rekey at the same time. A stable session-ID
                     // tie-break makes both sides retain the same handshake and avoids crossed keys.
-                    if (competingOffer.offer.sessionId <= offer.sessionId) return false
+                    if (!shouldAcceptIncomingSessionOffer(competingOffer.offer.sessionId, offer.sessionId)) return false
                     pendingEphemeralOffers.remove(competingOffer.offer.sessionId, competingOffer)
                     pendingEphemeralOfferExpiry.remove(competingOffer.offer.sessionId)
                 }
