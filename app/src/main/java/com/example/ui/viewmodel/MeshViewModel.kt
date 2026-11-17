@@ -374,15 +374,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun joinGroupFromUri(rawUri: String) {
-        viewModelScope.launch {
-            val payload = crypto.decodeGroupInviteUri(rawUri)
-            if (payload == null) {
-                _snackMessages.tryEmit("Invalid MeshLink group invitation URI")
-                return@launch
-            }
-            val joined = repository.joinGroupFromInvite(payload)
-            _snackMessages.tryEmit("Joined community group '${joined.name}'")
-        }
+        _snackMessages.tryEmit(
+            "Legacy QR group invites are disabled because they expose the group encryption key. Ask an admin to invite this device through an authenticated peer connection."
+        )
     }
 
     fun invitePeerToGroup(groupId: String, peer: PeerEntity) {
@@ -397,7 +391,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     fun removeGroupMember(groupId: String, peerId: String) {
         viewModelScope.launch {
             repository.removeGroupMember(groupId, peerId)
-            _snackMessages.tryEmit("Removed member from group")
+            _snackMessages.tryEmit("Member removed locally only. Remote key rotation and revocation are not yet synchronized.")
         }
     }
 
@@ -411,7 +405,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     fun rotateGroupKey(groupId: String) {
         viewModelScope.launch {
             repository.rotateGroupKey(groupId)
-            _snackMessages.tryEmit("Group AES-256 key rotated")
+            _snackMessages.tryEmit("Local group key changed only. Remote members have NOT received the new key; do not assume revocation is complete.")
         }
     }
 
