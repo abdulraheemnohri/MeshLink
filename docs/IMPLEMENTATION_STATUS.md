@@ -313,3 +313,13 @@ The app's release keystore must remain private and outside Git. A signed release
 - Receiver application is idempotent for an exact duplicate role update, allowing a retry to be acknowledged when the original ACK was lost. Older updates are rejected; newer role decisions and key epochs supersede stale outbox records.
 - Group messages remain blocked while either key-epoch updates or role-update records are unresolved.
 - Remaining validation: CI migration/DAO tests; two-device role promotion/demotion with lost ACK; offline member reconnect; duplicate role packet replay; epoch change during pending role delivery; and verification that stale role outbox entries are superseded without blocking group traffic indefinitely.
+
+
+## Session reliability and rekey (2026-11-17)
+
+- Verified peers now negotiate an ephemeral session automatically when a direct endpoint is discovered or reconnects, rather than waiting for the first user message.
+- Added a lightweight 30-second session maintenance loop. Established sessions begin rekey negotiation 60 seconds before the 15-minute key lifetime; expired session key byte arrays are cleared when detected.
+- Added deterministic arbitration for simultaneous offers: both peers choose the lexicographically smaller session ID. This avoids crossed concurrent handshakes installing different traffic-key pairs.
+- Added unit tests for the arbitration rule in both peer perspectives.
+- Existing 90-second handshake expiry and automatic private-text retry remain in place. Paused outgoing file transfers resume when the session-established event is emitted.
+- Remaining validation: two-device simultaneous reconnect/rekey, packet loss during rekey, session expiry while a file transfer is paused, process death during an offer, and old/new app version interoperability. The maintenance loop and radio behavior still require physical-device testing.
