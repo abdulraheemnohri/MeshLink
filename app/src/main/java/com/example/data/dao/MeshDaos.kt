@@ -65,6 +65,12 @@ interface GroupDao {
     @Query("SELECT * FROM group_members WHERE groupId = :groupId")
     fun observeMembers(groupId: String): Flow<List<GroupMemberEntity>>
 
+    @Query("SELECT * FROM group_members WHERE groupId = :groupId")
+    suspend fun getMembersOnce(groupId: String): List<GroupMemberEntity>
+
+    @Query("SELECT * FROM group_members WHERE groupId = :groupId AND peerId = :peerId LIMIT 1")
+    suspend fun getMember(groupId: String, peerId: String): GroupMemberEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMember(member: GroupMemberEntity)
 
