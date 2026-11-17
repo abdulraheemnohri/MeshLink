@@ -592,6 +592,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     com.example.core.protocol.TransportType.LOCAL_LAN,
                     com.example.core.protocol.TransportType.BLE,
                     com.example.core.protocol.TransportType.BLUETOOTH_CLASSIC,
+                    com.example.core.protocol.TransportType.NEARBY_CONNECTIONS,
                     com.example.core.protocol.TransportType.WIFI_DIRECT,
                     com.example.core.protocol.TransportType.WIFI_AWARE
                 )
