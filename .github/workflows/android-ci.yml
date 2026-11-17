@@ -30,7 +30,7 @@ jobs:
           java-version: "21"
 
       - name: Validate Gradle Wrapper
-        uses: gradle/actions/wrapper-validation@v4
+        uses: gradle/actions/wrapper-validation@v6
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -107,7 +107,7 @@ jobs:
 
       - name: Upload debug APK and build information
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: meshlink-debug-apk
           path: |
@@ -126,7 +126,7 @@ jobs:
       contents: write
     steps:
       - name: Check out latest main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: main
 
