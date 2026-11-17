@@ -1,6 +1,9 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -11,6 +14,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -54,7 +59,10 @@ fun GlassPanel(
     val surfaceColor = MaterialTheme.colorScheme.surfaceVariant
     val elevatedColor = MaterialTheme.colorScheme.surface
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(10.dp, shape, ambientColor = accentColor.copy(alpha = 0.08f), spotColor = accentColor.copy(alpha = 0.12f))
+            .animateContentSize(),
         shape = shape,
         color = Color.Transparent,
         border = BorderStroke(
@@ -72,14 +80,23 @@ fun GlassPanel(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            surfaceColor.copy(alpha = 0.85f),
-                            elevatedColor.copy(alpha = 0.92f)
+                            surfaceColor.copy(alpha = 0.96f),
+                            elevatedColor.copy(alpha = 0.98f)
                         )
                     )
                 )
-                .padding(16.dp),
-            content = content
-        )
+                .padding(16.dp)
+        ) {
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(tween(260)) + slideInVertically(
+                    initialOffsetY = { it / 18 },
+                    animationSpec = tween(320, easing = FastOutSlowInEasing)
+                )
+            ) {
+                Column(content = content)
+            }
+        }
     }
 }
 
@@ -90,16 +107,19 @@ fun PulseStatusDot(
     inactiveColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     size: Dp = 10.dp
 ) {
-    val transition = rememberInfiniteTransition(label = "pulse")
-    val scale by transition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.35f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1100, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_scale"
-    )
+    val scale = if (active) {
+        val transition = rememberInfiniteTransition(label = "pulse")
+        val animatedScale by transition.animateFloat(
+            initialValue = 0.88f,
+            targetValue = 1.28f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1250, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulse_scale"
+        )
+        animatedScale
+    } else 1f
     val color = if (active) activeColor else inactiveColor.copy(alpha = 0.5f)
     Box(
         contentAlignment = Alignment.Center,
@@ -164,11 +184,23 @@ fun SectionTitle(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .animateContentSize()
+            .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .padding(bottom = 7.dp)
+                    .size(width = 34.dp, height = 3.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
+                        )
+                    )
+            )
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
