@@ -42,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -200,6 +201,29 @@ fun TransferManagerScreen(
     onPause: (String) -> Unit,
     onResume: (String) -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf("ALL") }
+    val activeCount = transfers.count { it.status == "TRANSFERRING" }
+    val verifiedCount = transfers.count { it.status == "VERIFIED" || it.status == "COMPLETED" }
+    val attentionCount = transfers.count { it.status == "PAUSED" || it.status == "FAILED" }
+    val visibleTransfers = remember(transfers, searchQuery, selectedFilter) {
+        transfers.filter { transfer ->
+            val query = searchQuery.trim()
+            val matchesQuery = query.isBlank() ||
+                transfer.fileName.contains(query, ignoreCase = true) ||
+                transfer.peerAlias.contains(query, ignoreCase = true) ||
+                transfer.transportType.contains(query, ignoreCase = true) ||
+                transfer.status.contains(query, ignoreCase = true)
+            val matchesFilter = when (selectedFilter) {
+                "ACTIVE" -> transfer.status == "TRANSFERRING"
+                "ATTENTION" -> transfer.status == "PAUSED" || transfer.status == "FAILED"
+                "VERIFIED" -> transfer.status == "VERIFIED" || transfer.status == "COMPLETED"
+                else -> true
+            }
+            matchesQuery && matchesFilter
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier
@@ -209,28 +233,86 @@ fun TransferManagerScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                SectionTitle(
-                    title = "Transfer Queue & Checkpoints",
-                    subtitle = "Chunk-level resume & SHA-256 verification"
+                GlassPanel(accentColor = NeonCyan) {
+                    SectionTitle(
+                        title = "Transfer Queue & Checkpoints",
+                        subtitle = "Live database progress • acknowledged chunks • end-to-end SHA-256 verification"
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TransferMetric("Active", activeCount.toString(), NeonCyan, Modifier.weight(1f))
+                        TransferMetric("Verified", verifiedCount.toString(), MeshEmerald, Modifier.weight(1f))
+                        TransferMetric("Attention", attentionCount.toString(), MeshAmber, Modifier.weight(1f))
+                    }
+                }
+            }
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it.take(120) },
+                    modifier = Modifier.fillMaxWidth().testTag("transfer_search"),
+                    singleLine = true,
+                    label = { Text("Search transfers") },
+                    placeholder = { Text("File name, peer, transport or status") },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            androidx.compose.material3.TextButton(onClick = { searchQuery = "" }) {
+                                Text("Clear")
+                            }
+                        }
+                    }
                 )
             }
-            if (transfers.isEmpty()) {
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("ALL", "ACTIVE", "ATTENTION", "VERIFIED").forEach { filter ->
+                        FilterChip(
+                            selected = selectedFilter == filter,
+                            onClick = { selectedFilter = filter },
+                            label = {
+                                Text(
+                                    when (filter) {
+                                        "ATTENTION" -> "Needs attention"
+                                        else -> filter.lowercase().replaceFirstChar { it.uppercase() }
+                                    }
+                                )
+                            },
+                            modifier = Modifier.testTag("transfer_filter_$filter")
+                        )
+                    }
+                }
+            }
+            if (visibleTransfers.isEmpty()) {
                 item {
                     GlassPanel(accentColor = ElectricTeal) {
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp),
+                            modifier = Modifier.fillMaxWidth().padding(20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(Icons.Filled.CloudUpload, contentDescription = null, tint = ElectricTeal, modifier = Modifier.size(40.dp))
+                            Icon(
+                                Icons.Filled.CloudUpload,
+                                contentDescription = null,
+                                tint = ElectricTeal,
+                                modifier = Modifier.size(40.dp)
+                            )
                             Spacer(Modifier.height(8.dp))
-                            Text("No file transfers queued", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                if (transfers.isEmpty()) "No file transfers yet" else "No matching transfers",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                if (transfers.isEmpty()) "Choose a verified peer in Files to send a document or media." else "Try another search or filter.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             } else {
-                items(transfers, key = { it.transferId }) { xfer ->
+                items(visibleTransfers, key = { it.transferId }) { xfer ->
                     TransferCard(
                         xfer = xfer,
                         onPause = { onPause(xfer.transferId) },
@@ -244,6 +326,24 @@ fun TransferManagerScreen(
 }
 
 @Composable
+private fun TransferMetric(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(CircleShape.copy(all = false))
+            .background(color.copy(alpha = 0.09f))
+            .padding(horizontal = 10.dp, vertical = 9.dp)
+    ) {
+        Text(value, style = MaterialTheme.typography.titleLarge, color = color)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 private fun TransferCard(
     xfer: FileTransferEntity,
     onPause: () -> Unit,
@@ -252,14 +352,15 @@ private fun TransferCard(
 ) {
     val progress = (xfer.completedChunks.toFloat() / xfer.totalChunks.coerceAtLeast(1).toFloat())
         .coerceIn(0f, 1f)
-    GlassPanel(
-        accentColor = when (xfer.status) {
-            "VERIFIED", "COMPLETED" -> MeshEmerald
-            "PAUSED" -> MeshAmber
-            "FAILED" -> MeshCrimson
-            else -> NeonCyan
-        }
-    ) {
+    val isVerified = xfer.status == "VERIFIED" || xfer.status == "COMPLETED"
+    val statusColor = when (xfer.status) {
+        "VERIFIED", "COMPLETED" -> MeshEmerald
+        "PAUSED" -> MeshAmber
+        "FAILED" -> MeshCrimson
+        else -> NeonCyan
+    }
+    val completedBytes = (xfer.totalBytes * progress).toLong().coerceIn(0L, xfer.totalBytes)
+    GlassPanel(accentColor = statusColor) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -268,49 +369,90 @@ private fun TransferCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(xfer.fileName, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = "${if (xfer.isOutgoing) "To" else "From"} ${xfer.peerAlias} • ${xfer.totalBytes / 1024} KB • ${xfer.completedChunks}/${xfer.totalChunks} chunks",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = "${if (xfer.isOutgoing) "Sending to" else "Received from"} ${xfer.peerAlias}",
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             MeshPillBadge(
                 text = xfer.status,
-                color = if (xfer.status == "VERIFIED") MeshEmerald else NeonCyan,
-                icon = if (xfer.status == "VERIFIED") Icons.Filled.Verified else null
+                color = statusColor,
+                icon = if (isVerified) Icons.Filled.Verified else null
             )
         }
         Spacer(Modifier.height(8.dp))
         LinearProgressIndicator(
             progress = { progress },
-            modifier = Modifier.fillMaxWidth(),
-            color = if (xfer.status == "VERIFIED") MeshEmerald else NeonCyan
+            modifier = Modifier.fillMaxWidth().testTag("transfer_progress_${xfer.transferId}"),
+            color = statusColor
         )
+        Spacer(Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "${formatTransferBytes(completedBytes)} / ${formatTransferBytes(xfer.totalBytes)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "${(progress * 100).toInt()}% • ${xfer.completedChunks.coerceIn(0, xfer.totalChunks)}/${xfer.totalChunks} chunks",
+                style = MaterialTheme.typography.labelSmall,
+                color = statusColor
+            )
+        }
         Spacer(Modifier.height(6.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "SHA-256: ${xfer.sha256.take(18)}...",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (showControls && xfer.status != "VERIFIED") {
-                Row {
-                    if (xfer.status == "TRANSFERRING") {
-                        IconButton(onClick = onPause) {
-                            Icon(Icons.Filled.Pause, contentDescription = "Pause transfer", tint = MeshAmber)
-                        }
-                    } else if (xfer.status == "PAUSED" || xfer.status == "FAILED") {
-                        IconButton(onClick = onResume) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = "Resume transfer", tint = MeshEmerald)
-                        }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "${xfer.transportType} • ${xfer.mimeType}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    if (isVerified) "SHA-256 verified by the receiving peer"
+                    else "SHA-256: ${xfer.sha256.take(18)}…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isVerified) MeshEmerald else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (showControls && xfer.isOutgoing && !isVerified) {
+                when (xfer.status) {
+                    "TRANSFERRING" -> IconButton(
+                        onClick = onPause,
+                        modifier = Modifier.testTag("pause_transfer_${xfer.transferId}")
+                    ) {
+                        Icon(Icons.Filled.Pause, contentDescription = "Pause transfer", tint = MeshAmber)
+                    }
+                    "PAUSED", "FAILED" -> IconButton(
+                        onClick = onResume,
+                        modifier = Modifier.testTag("resume_transfer_${xfer.transferId}")
+                    ) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = "Resume transfer", tint = MeshEmerald)
                     }
                 }
             }
         }
+        if (xfer.status == "FAILED" && !xfer.isOutgoing) {
+            Text(
+                "This received file failed integrity checks. Ask the sender to send it again.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MeshCrimson
+            )
+        }
     }
+}
+
+private fun formatTransferBytes(bytes: Long): String {
+    if (bytes < 1024L) return "$bytes B"
+    if (bytes < 1024L * 1024L) return "${bytes / 1024.0.let { "%.1f".format(java.util.Locale.ROOT, it) }} KB"
+    if (bytes < 1024L * 1024L * 1024L) return "${bytes / (1024.0 * 1024.0).let { "%.1f".format(java.util.Locale.ROOT, it) }} MB"
+    return "${bytes / (1024.0 * 1024.0 * 1024.0).let { "%.2f".format(java.util.Locale.ROOT, it) }} GB"
 }
 
 @Composable
