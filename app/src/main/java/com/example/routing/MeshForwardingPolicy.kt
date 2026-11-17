@@ -14,6 +14,7 @@ object MeshForwardingPolicy {
     fun hasValidRouteMetadata(packet: MeshPacket): Boolean =
         packet.hopLimit in 0..MAX_ROUTE_HOPS &&
             packet.hopCount in 0..MAX_ROUTE_HOPS &&
+            packet.hopLimit + packet.hopCount <= MAX_ROUTE_HOPS &&
             packet.visitedPeers.size <= MAX_ROUTE_HOPS &&
             packet.visitedPeers.distinct().size == packet.visitedPeers.size
 
