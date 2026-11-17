@@ -39,6 +39,12 @@ class AppContainer(context: Context) {
     )
     val wifiDirectTransport = WifiDirectTransport(appContext)
     val wifiAwareTransport = WifiAwareTransport(appContext) { crypto.ensureLocalIdentity() }
+    val nearbyConnectionsTransport = NearbyConnectionsMeshTransport(
+        appContext,
+        { crypto.ensureLocalIdentity() },
+        { packet -> crypto.signPacket(packet) },
+        { packet, signingPublicKey -> crypto.verifyPacketSignature(packet, signingPublicKey) }
+    )
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val discoveryCoordinator = UniversalDiscoveryCoordinator(
