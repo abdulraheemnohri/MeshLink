@@ -792,19 +792,17 @@ fun DiagnosticsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(
                                 onClick = {
-                                    fun csvCell(value: String): String = "\"" + value.replace("\"", "\"\"") + "\""
-                                    exportPayload = buildString {
-                                        appendLine("timestamp,transport,event_type,peer_id,summary")
-                                        filteredEvents.forEach { event ->
-                                            appendLine(listOf(
-                                                csvCell(SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date(event.timestamp))),
-                                                csvCell(event.transportType),
-                                                csvCell(event.eventType),
-                                                csvCell(event.peerId.orEmpty()),
-                                                csvCell(event.summary)
-                                            ).joinToString(","))
+                                    exportPayload = com.example.core.diagnostics.DiagnosticsCsvExporter.toCsv(
+                                        filteredEvents.map { event ->
+                                            com.example.core.diagnostics.DiagnosticsCsvRow(
+                                                timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date(event.timestamp)),
+                                                transport = event.transportType,
+                                                eventType = event.eventType,
+                                                peerId = event.peerId.orEmpty(),
+                                                summary = event.summary
+                                            )
                                         }
-                                    }
+                                    )
                                     exportStatus = null
                                     exportLauncher.launch("meshlink-diagnostics-${System.currentTimeMillis()}.csv")
                                 },
