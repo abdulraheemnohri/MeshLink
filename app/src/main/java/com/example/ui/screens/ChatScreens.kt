@@ -461,6 +461,8 @@ fun PrivateChatScreen(
     peer: PeerEntity?,
     messages: List<MessageEntity>,
     onSendMessage: (String, RoutingStrategy, Int) -> Unit,
+    defaultStrategy: RoutingStrategy = RoutingStrategy.AUTONOMOUS,
+    onStrategySelected: (RoutingStrategy) -> Unit = {},
     onReact: (MessageEntity, String) -> Unit
 ) {
     var draft by remember { mutableStateOf("") }
@@ -472,7 +474,8 @@ fun PrivateChatScreen(
                 it.deliveryStatus.contains(searchQuery.trim(), ignoreCase = true)
         }
     }
-    var selectedStrategy by remember { mutableStateOf(RoutingStrategy.AUTONOMOUS) }
+    var selectedStrategy by remember { mutableStateOf(defaultStrategy) }
+    LaunchedEffect(defaultStrategy) { selectedStrategy = defaultStrategy }
     var ttlHours by remember { mutableIntStateOf(24) }
     val messageListState = rememberLazyListState()
     LaunchedEffect(filteredMessages.size, searchQuery) {
@@ -542,8 +545,12 @@ fun PrivateChatScreen(
                     ).forEach { strat ->
                         FilterChip(
                             selected = selectedStrategy == strat,
-                            onClick = { selectedStrategy = strat },
-                            label = { Text(strat.label, style = MaterialTheme.typography.labelSmall) }
+                            onClick = {
+                                selectedStrategy = strat
+                                onStrategySelected(strat)
+                            },
+                            label = { Text(strat.label, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.testTag("private_routing_mode_${strat.name}")
                         )
                     }
                 }
@@ -641,7 +648,9 @@ fun GroupChatScreen(
     inviteUri: String,
     localPeerId: String,
     messages: List<MessageEntity>,
-    onSendMessage: (String) -> Unit,
+    onSendMessage: (String, RoutingStrategy) -> Unit,
+    defaultStrategy: RoutingStrategy = RoutingStrategy.AUTONOMOUS,
+    onStrategySelected: (RoutingStrategy) -> Unit = {},
     onInvitePeer: (PeerEntity) -> Unit,
     onRemoveMember: (String) -> Unit,
     onToggleRole: (GroupMemberEntity) -> Unit,
@@ -659,6 +668,8 @@ fun GroupChatScreen(
                 it.deliveryStatus.contains(searchQuery.trim(), ignoreCase = true)
         }
     }
+    var selectedStrategy by remember { mutableStateOf(defaultStrategy) }
+    LaunchedEffect(defaultStrategy) { selectedStrategy = defaultStrategy }
     var showInviteDialog by remember { mutableStateOf(false) }
     var showMembersDialog by remember { mutableStateOf(false) }
     var pendingRemoval by remember { mutableStateOf<GroupMemberEntity?>(null) }
@@ -717,6 +728,30 @@ fun GroupChatScreen(
             }
 
             Spacer(Modifier.height(8.dp))
+            GlassPanel(accentColor = NeonCyan) {
+                Text("Connection mode", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(6.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    RoutingStrategy.entries.forEach { strategy ->
+                        FilterChip(
+                            selected = selectedStrategy == strategy,
+                            onClick = {
+                                selectedStrategy = strategy
+                                onStrategySelected(strategy)
+                            },
+                            label = { Text(strategy.label, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.testTag("group_routing_mode_${strategy.name}")
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    selectedStrategy.summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it.take(120) },
@@ -763,7 +798,7 @@ fun GroupChatScreen(
                     enabled = draft.isNotBlank() && group != null,
                     onClick = {
                         val outgoing = draft.trim()
-                        if (outgoing.isNotEmpty()) onSendMessage(outgoing)
+                        if (outgoing.isNotEmpty()) onSendMessage(outgoing, selectedStrategy)
                         draft = ""
                     },
                     modifier = Modifier
