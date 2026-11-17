@@ -313,6 +313,7 @@ fun ConnectionsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var peerFilter by remember { mutableStateOf("ALL") }
     var expandedPeerId by remember { mutableStateOf<String?>(null) }
+    var pendingPeerAction by remember { mutableStateOf<Pair<PeerEntity, String>?>(null)}
     val filteredPeers = peers.filter { peer ->
         val matchesQuery = searchQuery.isBlank() || peer.alias.contains(searchQuery, ignoreCase = true) || peer.deviceId.contains(searchQuery, ignoreCase = true) || peer.fingerprint.contains(searchQuery, ignoreCase = true)
         val matchesFilter = when (peerFilter) {
@@ -407,7 +408,7 @@ fun ConnectionsScreen(
                                     modifier = Modifier.testTag("connection_profile_${peer.deviceId}")
                                 ) { Text(if (expandedPeerId == peer.deviceId) "Hide profile" else "View profile") }
                                 Row {
-                                IconButton(onClick = { onToggleVerify(peer) }) {
+                                IconButton(onClick = { pendingPeerAction = peer to "VERIFY" }) {
                                     Icon(
                                         imageVector = Icons.Filled.VerifiedUser,
                                         contentDescription = "Toggle trust verification",
@@ -415,7 +416,7 @@ fun ConnectionsScreen(
                                     )
                                 }
                                 if (peer.isConnected) {
-                                    IconButton(onClick = { onDisconnect(peer.deviceId) }) {
+                                    IconButton(onClick = { pendingPeerAction = peer to "DISCONNECT" }) {
                                         Icon(
                                             imageVector = Icons.Filled.LinkOff,
                                             contentDescription = "Disconnect peer",
@@ -423,7 +424,7 @@ fun ConnectionsScreen(
                                         )
                                     }
                                 }
-                                IconButton(onClick = { onToggleBlock(peer) }) {
+                                IconButton(onClick = { pendingPeerAction = peer to "BLOCK" }) {
                                     Icon(
                                         imageVector = Icons.Filled.Block,
                                         contentDescription = "Block or unblock peer",
@@ -490,6 +491,35 @@ fun ConnectionsScreen(
                 }
             }
         }
+    }
+
+    pendingPeerAction?.let { (peer, action) ->
+        val title = when (action) {
+            "VERIFY" -> if (peer.verifiedByQr) "Remove trust verification?" else "Change trust status?"
+            "DISCONNECT" -> "Disconnect ${peer.alias}?"
+            else -> if (peer.blocked) "Unblock ${peer.alias}?" else "Block ${peer.alias}?"
+        }
+        val message = when (action) {
+            "VERIFY" -> if (peer.verifiedByQr) "This removes the local verified marker. It does not erase the peer identity." else "Only mark a peer verified after checking its identity fingerprint through a trusted channel."
+            "DISCONNECT" -> "The active connection will be closed. The peer record and message history will remain."
+            else -> if (peer.blocked) "This peer will be allowed to participate in future connections and routing again." else "This peer will be prevented from participating in messaging and routing. Existing local records are retained."
+        }
+        AlertDialog(
+            onDismissRequest = { pendingPeerAction = null },
+            title = { Text(title) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = {
+                    when (action) {
+                        "VERIFY" -> onToggleVerify(peer)
+                        "DISCONNECT" -> onDisconnect(peer.deviceId)
+                        else -> onToggleBlock(peer)
+                    }
+                    pendingPeerAction = null
+                }) { Text(when (action) { "VERIFY" -> "Confirm"; "DISCONNECT" -> "Disconnect"; else -> if (peer.blocked) "Unblock" else "Block" }) }
+            },
+            dismissButton = { TextButton(onClick = { pendingPeerAction = null }) { Text("Cancel") } }
+        )
     }
 }
 
