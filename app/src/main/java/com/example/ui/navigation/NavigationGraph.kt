@@ -50,6 +50,7 @@ fun NavigationGraph(
     val routes by viewModel.routes.collectAsStateWithLifecycle()
     val pendingPackets by viewModel.pendingPackets.collectAsStateWithLifecycle()
     val transfers by viewModel.transfers.collectAsStateWithLifecycle()
+    val lastExportedUri by viewModel.lastExportedUri.collectAsStateWithLifecycle()
     val securityEvents by viewModel.securityEvents.collectAsStateWithLifecycle()
     val networkEvents by viewModel.networkEvents.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -248,7 +249,10 @@ fun NavigationGraph(
                 transfers = transfers,
                 onPause = { id -> viewModel.pauseTransfer(id) },
                 onResume = { id -> viewModel.resumeTransfer(id) },
-                onExport = { id, uri -> viewModel.exportVerifiedTransfer(id, uri) }
+                onExport = { id, uri -> viewModel.exportVerifiedTransfer(id, uri) },
+                lastExportedUri = lastExportedUri,
+                onOpenExported = { viewModel.openExportedFile() },
+                onShareExported = { viewModel.shareExportedFile() }
             )
         }
 
