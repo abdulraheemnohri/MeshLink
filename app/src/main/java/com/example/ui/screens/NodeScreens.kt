@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -692,6 +694,12 @@ private fun CapabilityRow(label: String, ready: Boolean, detail: String) {
     }
 }
 
+private data class RuntimePermissionGroup(
+    val title: String,
+    val description: String,
+    val permissions: List<String>
+)
+
 @Composable
 fun SettingsScreen(
     settings: SettingsEntity,
@@ -705,6 +713,21 @@ fun SettingsScreen(
     onUpdateSettings: ((SettingsEntity) -> SettingsEntity) -> Unit
 ) {
     var emergencyDraft by remember(settings.emergencyMessage) { mutableStateOf(settings.emergencyMessage) }
+    var permissionRefresh by remember { mutableStateOf(0) }
+    val context = LocalContext.current
+    val permissionGroups = remember {
+        listOf(
+            RuntimePermissionGroup("Camera", "Scan peer identity QR codes.", HardwareCapabilities.cameraRuntimePermissions()),
+            RuntimePermissionGroup("Bluetooth / Nearby Devices", "BLE scan and advertising, Bluetooth Classic connections, and Nearby peer discovery.", HardwareCapabilities.bluetoothRuntimePermissions()),
+            RuntimePermissionGroup("Nearby Wi-Fi", "Wi-Fi Direct and Wi-Fi Aware discovery. Android may group this with Nearby Devices.", HardwareCapabilities.nearbyWifiRuntimePermissions()),
+            RuntimePermissionGroup("Location", "GPS coordinates, location sharing, and legacy Wi-Fi/Bluetooth discovery where Android requires it.", HardwareCapabilities.locationRuntimePermissions()),
+            RuntimePermissionGroup("Microphone", "Voice push-to-talk recording. This permission is optional.", HardwareCapabilities.audioRuntimePermissions()),
+            RuntimePermissionGroup("Notifications", "Relay-service status and transfer/connection notifications.", HardwareCapabilities.notificationRuntimePermissions())
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissionRefresh++ }
     val isBiometricActive = userSettings.biometricLockEnabled || settings.biometricLockEnabled
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -777,6 +800,66 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
+            }
+
+            item {
+                GlassPanel(accentColor = MeshAmber) {
+                    SectionTitle(
+                        title = "Android Permission Manager",
+                        subtitle = "Grant only the capabilities you want to use. Optional permissions are not requested automatically."
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val refreshSnapshot = permissionRefresh
+                    permissionGroups.forEach { group ->
+                        val missing = group.permissions.filterNot { permission ->
+                            HardwareCapabilities.hasPermission(context, permission)
+                        }
+                        val grantedCount = group.permissions.size - missing.size
+                        val isGranted = missing.isEmpty()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(group.title, style = MaterialTheme.typography.titleSmall)
+                                Text(group.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    when {
+                                        group.permissions.isEmpty() -> "Not required on this Android version"
+                                        isGranted -> "Granted"
+                                        else -> "$grantedCount of ${group.permissions.size} permissions granted"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isGranted) MeshEmerald else MeshAmber
+                                )
+                            }
+                            OutlinedButton(
+                                enabled = missing.isNotEmpty(),
+                                onClick = { permissionLauncher.launch(missing.toTypedArray()) },
+                                modifier = Modifier.testTag("permission_request_button")
+                            ) { Text(if (isGranted) "Granted" else "Allow") }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    TextButton(
+                        onClick = {
+                            context.startActivity(
+                                Intent(
+                                    AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:" + context.packageName)
+                                )
+                            )
+                        },
+                        modifier = Modifier.align(Alignment.End)
+                    ) { Text("Open Android App Settings") }
+                    Text(
+                        "File sharing uses Android's system document picker, so broad storage access is not required. NFC, biometric, network, wake-lock and foreground-service declarations are handled by Android without runtime permission dialogs.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (refreshSnapshot < 0) Text("")
                 }
             }
 
