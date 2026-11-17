@@ -276,7 +276,7 @@ fun ChatsHubScreen(
                                     Text("New Community")
                                 }
                             }
-                        }
+                            Text(\n                                "Group membership is added through authenticated invitations from a verified admin. Legacy QR invites containing shared keys are intentionally rejected.",\n                                style = MaterialTheme.typography.bodySmall,\n                                color = MaterialTheme.colorScheme.onSurfaceVariant\n                            )\n                        }
 
                         if (visibleGroups.isEmpty()) {
                             item {
