@@ -11,6 +11,7 @@ import com.example.data.entities.FileChunkEntity
 import com.example.data.entities.FileTransferEntity
 import com.example.data.entities.GroupEntity
 import com.example.data.entities.GroupMemberEntity
+import com.example.data.entities.GroupKeyUpdateEntity
 import com.example.data.entities.MessageEntity
 import com.example.data.entities.NetworkEventEntity
 import com.example.data.entities.PeerEntity
@@ -545,6 +546,25 @@ class MeshRepository(
         )
         true
     }
+
+    suspend fun recordGroupKeyUpdate(groupId: String, epoch: Int, peerId: String, packetId: String, status: String) {
+        groupDao.upsertKeyUpdate(GroupKeyUpdateEntity(packetId, groupId, epoch, peerId, status))
+    }
+
+    suspend fun markGroupKeyUpdateAcknowledged(packetId: String): Boolean {
+        val updateRecord = groupDao.getKeyUpdateByPacketId(packetId) ?: return false
+        val now = System.currentTimeMillis()
+        groupDao.updateKeyUpdateStatus(packetId, "ACKED", now, now)
+        logSecurityEvent(
+            eventType = "GROUP_KEY_UPDATE_ACKED",
+            peerId = updateRecord.peerId,
+            summary = "Group key update acknowledged"
+        )
+        return true
+    }
+
+    suspend fun hasUnacknowledgedGroupKeyUpdates(groupId: String): Boolean =
+        groupDao.countUnacknowledgedKeyUpdates(groupId) > 0
 
     suspend fun getGroupById(groupId: String): GroupEntity? = groupDao.getGroupById(groupId)
 
