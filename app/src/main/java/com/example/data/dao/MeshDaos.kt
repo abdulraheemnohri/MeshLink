@@ -42,6 +42,9 @@ interface MessageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(message: MessageEntity)
 
+    @Query("SELECT * FROM messages WHERE conversationId = :peerId AND isOutgoing = 1 AND deliveryStatus = 'WAITING_SESSION' AND expiresAt > :now ORDER BY createdAt ASC")
+    suspend fun getPendingSessionMessages(peerId: String, now: Long): List<MessageEntity>
+
     @Query("UPDATE messages SET deliveryStatus = :status, deliveredAt = :deliveredAt, hopCount = :hopCount WHERE messageId = :messageId")
     suspend fun updateDeliveryStatus(messageId: String, status: String, deliveredAt: Long?, hopCount: Int)
 
