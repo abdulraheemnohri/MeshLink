@@ -488,3 +488,12 @@ CI and physical acceptance for these latest changes are pending. Real-device ver
 - Group removal and discovery shutdown failures are logged independently; cleanup of in-memory peer/group state and receiver registration continues.
 - The initialized P2P Channel is reused on a later start rather than silently creating a new channel on every stop/start cycle.
 - OEM-specific asynchronous group teardown and reconnect behavior still require physical-device acceptance.
+
+
+## Late-callback and inbound BLE hardening (2026-11-17)
+
+- Wi-Fi Aware attach/publish/subscribe callbacks are now scoped to a monotonically increasing lifecycle generation. A callback arriving after stop or a later restart cannot resurrect a stale session, overwrite current discovery state, or process stale peer/message events; stale sessions are closed.
+- Wi-Fi Aware send cancellation is rethrown instead of being converted to an ordinary queue failure, and pending-send entries are still removed in finally.
+- BLE GATT writes are accepted only while running, for the MeshLink packet characteristic, with no prepared write, zero offset, and a non-empty frame within the configured 512-byte bound. Unsupported/invalid writes receive an appropriate GATT status when a response is requested.
+- Wi-Fi Direct peer and connection-info callbacks are ignored after adapter stop so late framework callbacks cannot repopulate cleared group state.
+- A CI compile failure caused by a missing explicit return in BLE sendPacket was fixed. The latest Android CI run must complete before this pass is considered build-verified; physical adapter behavior remains unverified.
