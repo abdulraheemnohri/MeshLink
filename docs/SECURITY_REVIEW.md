@@ -6,13 +6,13 @@ This is a source-level review, not a penetration test or a formal cryptographic 
 
 ## Current high-priority findings
 
-### 1. Group invitation QR exposes the group encryption key
+### 1. Group invitation QR exposed the group encryption key
 
-**Status: OPEN — do not distribute group invitation QR codes publicly.**
+**Status: MITIGATED IN APP — QR export and legacy QR import are disabled. Secure recipient-specific QR invitations are not yet implemented.**
 
 `MeshCryptoEngine.encodeGroupInviteUri()` currently places the raw group AES key in the `key` query parameter. Anyone who obtains a screenshot, copied URI, QR image, chat export, or log containing that URI can recover the group key and decrypt group traffic encrypted with that key.
 
-The current QR invite format is therefore a bearer secret, not a safe public invitation. Do not post it publicly or send it through untrusted channels. A safe replacement requires an authenticated, per-recipient encrypted key envelope delivered over an authenticated peer session, plus an invite identifier/expiry and explicit recipient acceptance. Simply deleting the key field would break the existing QR join flow, so that protocol migration must be implemented end-to-end before changing the wire format.
+The old QR invite format was a bearer secret, not a safe public invitation. The app now returns a non-secret disabled marker instead of exporting the key, rejects legacy v1 QR payloads, and replaces the QR dialog with a security notice. Direct peer-to-peer group invitations remain a separate existing feature. A safe QR replacement still requires an authenticated, per-recipient encrypted key envelope, invite expiry, explicit recipient acceptance and protocol interoperability tests.
 
 ### 2. Pairwise key agreement uses long-lived identity ECDH keys
 
@@ -24,9 +24,9 @@ A future protocol version should use authenticated ephemeral ECDH, transcript-bo
 
 ### 3. QR identity import is not out-of-band identity verification
 
-**Status: OPEN — user fingerprint comparison is required.**
+**Status: PARTIALLY MITIGATED — new imports are untrusted by default and key changes are rejected. Manual fingerprint comparison is still required.**
 
-Importing a public identity payload establishes a local peer record and QR trust flag, but a QR payload alone does not prove that the person holding the device is the intended contact. Users should compare the displayed fingerprint through a separate trusted channel before relying on identity authenticity. A changed key for an existing device ID must be treated as a security event, not silently accepted.
+Importing a public identity payload now creates an untrusted peer record by default. Existing trusted peers retain their trust state only when both public keys and the fingerprint match exactly. If the same device ID arrives with changed keys or fingerprint, the import is rejected, a CRITICAL security event is recorded, and the existing pinned identity is preserved. Users must still compare the displayed fingerprint through a separate trusted channel before manually marking a new peer trusted.
 
 ### 4. Group key rotation and member removal need protocol enforcement
 
@@ -53,3 +53,14 @@ Before describing MeshLink as production-secure:
 ## Scope and limitations
 
 This review is based on source inspection only. It is not a claim that every transport, crypto path, or UI flow has been exhaustively audited. See `DEVICE_TEST_CHECKLIST.md` and `TEST_PLAN.md` for runtime validation work.
+
+
+## Recent mitigations (2026-11-17)
+
+- Disabled public group QR export because the previous URI embedded the raw AES group key.
+- Disabled legacy v1 group QR import; old invitations must not be treated as safe.
+- New QR identity imports are untrusted by default.
+- Re-importing an existing device ID with changed signing/agreement keys or fingerprint is rejected; the stored identity/trust state is preserved and a CRITICAL security event is recorded.
+- Group member removal and group-key rotation UI messages now explicitly state that these are local-only operations and do not prove remote revocation or distribution.
+
+These mitigations reduce unsafe behavior but do not complete the secure session protocol or group epoch distribution.
