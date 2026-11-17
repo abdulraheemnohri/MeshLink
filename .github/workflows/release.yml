@@ -54,6 +54,9 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "Release keystore restored outside the repository."
 
+      - name: Run unit tests
+        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest
+
       - name: Build release APK
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/meshlink-release-upload.jks
