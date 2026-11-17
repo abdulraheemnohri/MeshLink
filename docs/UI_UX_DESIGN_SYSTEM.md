@@ -90,3 +90,11 @@ Review every route on a compact phone and a wide screen, with both light and dar
 - Selected peer details include only persisted identity and route data; missing route records are presented as missing rather than drawing a speculative connection.
 - Diagnostics search/filter controls have stable test tags, and the event list has a dedicated no-results state.
 - The topology radar guide is static to avoid continuous decorative motion and to prevent implying live radio ranging. Verify with TalkBack and large font/display scaling on a physical Android device.
+
+
+## Peer action safety and diagnostic export
+
+- Disconnect, block/unblock and trust-marker changes use explicit confirmation dialogs with action-specific consequences and a cancel path.
+- Diagnostics exports only the currently filtered event list through Android's Storage Access Framework document picker. CSV fields are timestamp, transport, event type, peer ID and summary.
+- The UI explicitly asks users to review the exported file before sharing it. No chat content, file payload, identity private key or credential is included in this export.
+- Permission onboarding should preserve the user's ability to continue without optional capabilities and grant them later when needed.
