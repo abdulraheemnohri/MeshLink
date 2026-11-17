@@ -328,7 +328,7 @@ class BleMeshTransport(
         gattServer = btManager?.openGattServer(context, object : BluetoothGattServerCallback() {
             override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
                 if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    incomingFrames.remove(device.address)
+                    bluetoothAddressOrNull(device)?.let(incomingFrames::remove)
                 }
             }
 
@@ -341,17 +341,23 @@ class BleMeshTransport(
                 offset: Int,
                 value: ByteArray
             ) {
+                val remoteAddress = bluetoothAddressOrNull(device) ?: return
                 if (responseNeeded) {
-                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                    runCatching {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                    }
                 }
                 if (characteristic.uuid == PACKET_CHAR_UUID && offset == 0 && !preparedWrite) {
                     val reassembler = synchronized(incomingFrames) {
-                        incomingFrames[device.address] ?: run {
+                        incomingFrames[remoteAddress] ?: run {
                             if (incomingFrames.size >= MAX_BLE_PEERS) {
                                 incomingFrames.keys.firstOrNull()?.let(incomingFrames::remove)
                             }
-                            BleFrameCodec.Reassembler(transferTimeoutMs = 180_000L).also {
-                                incomingFrames[device.address] = it
+                            BleFrameCodec.Reassembler(
+                                maxTransfers = MAX_INCOMPLETE_TRANSFERS_PER_PEER,
+                                transferTimeoutMs = 180_000L
+                            ).also {
+                                incomingFrames[remoteAddress] = it
                             }
                         }
                     }
@@ -364,7 +370,7 @@ class BleMeshTransport(
                                     TransportEvent.PacketReceived(
                                         packet = decoded,
                                         transportType = TransportType.BLE,
-                                        remoteAddress = device.address
+                                        remoteAddress = remoteAddress
                                     )
                                 )
                             }
@@ -383,8 +389,16 @@ class BleMeshTransport(
         gattServer?.addService(service)
     }
 
+    private fun bluetoothAddressOrNull(device: BluetoothDevice): String? = try {
+        device.address
+    } catch (_: SecurityException) {
+        null
+    }
+
     companion object {
-        private const val MAX_BLE_PEERS = 64
+        // 16 peers × 2 incomplete transfers × 256 KiB caps worst-case reassembly payloads near 8 MiB.
+        private const val MAX_BLE_PEERS = 16
+        private const val MAX_INCOMPLETE_TRANSFERS_PER_PEER = 2
         val SERVICE_UUID: UUID = UUID.fromString("7d2ea901-4f8b-4a3c-9c1e-8a6b5d4e3f01")
         val PACKET_CHAR_UUID: UUID = UUID.fromString("7d2ea902-4f8b-4a3c-9c1e-8a6b5d4e3f01")
     }
