@@ -11,6 +11,7 @@ import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 import com.google.android.gms.tasks.Task
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -149,16 +150,25 @@ class NearbyConnectionsMeshTransport(
         if (endpoint.transportType != transportType || endpoint.address.isBlank()) return false
         if (endpoint.address in authenticated) return true
         val waiter = CompletableDeferred<Boolean>()
-        waiters[endpoint.address] = waiter
-        if (requested.add(endpoint.address)) {
+        val activeWaiter = waiters.putIfAbsent(endpoint.address, waiter) ?: waiter
+        if (activeWaiter === waiter && requested.add(endpoint.address)) {
             client.requestConnection(localIdentityProvider().deviceId, endpoint.address, lifecycle)
                 .addOnFailureListener {
                     requested.remove(endpoint.address)
                     waiters.remove(endpoint.address)?.complete(false)
                 }
         }
-        return try { withTimeoutOrNull(CONNECT_TIMEOUT_MS) { waiter.await() } == true }
-        finally { waiters.remove(endpoint.address, waiter) }
+        return try {
+            withTimeoutOrNull(CONNECT_TIMEOUT_MS) { activeWaiter.await() } == true
+        } finally {
+            if (activeWaiter === waiter) {
+                waiters.remove(endpoint.address, waiter)
+                if (!waiter.isCompleted) {
+                    requested.remove(endpoint.address)
+                    runCatching { client.disconnectFromEndpoint(endpoint.address) }
+                }
+            }
+        }
     }
 
     override suspend fun sendPacket(endpoint: DiscoveredEndpoint, packet: MeshPacket): Boolean {
@@ -167,8 +177,15 @@ class NearbyConnectionsMeshTransport(
         if (endpointId !in authenticated) return false
         val bytes = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
         if (bytes.isEmpty() || bytes.size > MAX_FRAME_BYTES) return false
-        return runCatching { awaitCompletion(client.sendPayload(endpointId, Payload.fromBytes(bytes))); true }
-            .getOrElse { log("SEND_FAILED", it.message ?: "Nearby send failed"); false }
+        return try {
+            awaitCompletion(client.sendPayload(endpointId, Payload.fromBytes(bytes)))
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            log("SEND_FAILED", failure.message ?: "Nearby send failed")
+            false
+        }
     }
 
     override suspend fun stop() = withContext(Dispatchers.IO) {
@@ -271,8 +288,13 @@ class NearbyConnectionsMeshTransport(
     private suspend fun sendRaw(endpointId: String, packet: MeshPacket) {
         val bytes = MeshPacketCodec.encode(packet).toByteArray(Charsets.UTF_8)
         if (bytes.isNotEmpty() && bytes.size <= MAX_FRAME_BYTES) {
-            runCatching { awaitCompletion(client.sendPayload(endpointId, Payload.fromBytes(bytes))) }
-                .onFailure { log("HANDSHAKE_SEND_FAILED", it.message ?: "Nearby handshake send failed") }
+            try {
+                awaitCompletion(client.sendPayload(endpointId, Payload.fromBytes(bytes)))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                log("HANDSHAKE_SEND_FAILED", failure.message ?: "Nearby handshake send failed")
+            }
         }
     }
 
