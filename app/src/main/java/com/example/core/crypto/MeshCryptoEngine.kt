@@ -169,6 +169,50 @@ class MeshCryptoEngine(private val context: Context) {
         }.getOrDefault(false)
     }
 
+    fun createEphemeralSessionOffer(
+        peerId: String,
+        protocol: EphemeralSessionHandshake
+    ): EphemeralSessionHandshake.PendingOffer {
+        val identity = ensureLocalIdentity()
+        val privateKey = signingKeyPair?.private ?: throw IllegalStateException("Signing key unavailable")
+        return protocol.createOffer(identity.deviceId, peerId, privateKey)
+    }
+
+    fun acceptEphemeralSessionOffer(
+        offer: EphemeralSessionHandshake.Offer,
+        peerSigningPublicKeyB64: String,
+        protocol: EphemeralSessionHandshake
+    ): EphemeralSessionHandshake.AcceptedOffer {
+        val identity = ensureLocalIdentity()
+        val privateKey = signingKeyPair?.private ?: throw IllegalStateException("Signing key unavailable")
+        val peerKey = KeyFactory.getInstance("EC").generatePublic(
+            X509EncodedKeySpec(Base64.decode(peerSigningPublicKeyB64, Base64.NO_WRAP))
+        )
+        return protocol.acceptOffer(offer, offer.initiatorId, identity.deviceId, peerKey, privateKey)
+    }
+
+    fun finishEphemeralSessionOffer(
+        pending: EphemeralSessionHandshake.PendingOffer,
+        response: EphemeralSessionHandshake.Response,
+        peerSigningPublicKeyB64: String,
+        protocol: EphemeralSessionHandshake
+    ): EphemeralSessionHandshake.SessionKeys {
+        val peerKey = KeyFactory.getInstance("EC").generatePublic(
+            X509EncodedKeySpec(Base64.decode(peerSigningPublicKeyB64, Base64.NO_WRAP))
+        )
+        return protocol.finishOffer(pending, response, response.responderId, peerKey)
+    }
+
+    fun encryptWithSessionKey(plaintext: String, keyBytes: ByteArray): String {
+        require(keyBytes.size == 32) { "Session traffic key must be 256 bits" }
+        return encryptAesGcm(plaintext.toByteArray(Charsets.UTF_8), SecretKeySpec(keyBytes, "AES"))
+    }
+
+    fun decryptWithSessionKey(ciphertext: String, keyBytes: ByteArray): String? = runCatching {
+        require(keyBytes.size == 32) { "Session traffic key must be 256 bits" }
+        String(decryptAesGcm(ciphertext, SecretKeySpec(keyBytes, "AES")), Charsets.UTF_8)
+    }.getOrNull()
+
     fun encryptForPeer(
         plaintext: String,
         peerAgreementPubB64: String,
