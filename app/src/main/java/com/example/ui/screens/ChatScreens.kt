@@ -625,6 +625,9 @@ fun GroupChatScreen(
                         IconButton(onClick = onRotateKey) {
                             Icon(Icons.Filled.Key, contentDescription = "Rotate Group Key", tint = MeshAmber)
                         }
+                        IconButton(onClick = onRetryKeyUpdates) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Retry Pending Group Key Updates", tint = ElectricTeal)
+                        }
                     }
                 }
             }
