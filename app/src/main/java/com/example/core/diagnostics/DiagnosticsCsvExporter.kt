@@ -35,7 +35,7 @@ object DiagnosticsCsvExporter {
 
     private fun String.toCsvCell(): String {
         val firstMeaningfulCharacter = firstOrNull { !it.isWhitespace() && it != '\uFEFF' }
-        val safeValue = if (firstMeaningfulCharacter in formulaPrefixes) "'$this" else this
+        val safeValue = if (firstMeaningfulCharacter?.let { it in formulaPrefixes } == true) "'$this" else this
         return "\"" + safeValue.replace("\"", "\"\"") + "\""
     }
 }
