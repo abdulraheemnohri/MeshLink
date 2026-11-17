@@ -769,7 +769,14 @@ class MeshRoutingEngine(
                 )
                 return
             }
-            packetReplayStore.rememberIfNew(packet.messageId, packet.expiresAt, now)
+            if (!packetReplayStore.rememberIfNew(packet.messageId, packet.expiresAt, now)) {
+                repository.logSecurityEvent(
+                    eventType = "REPLAY_DROP",
+                    peerId = packet.senderId,
+                    summary = "Dropped concurrent duplicate handshake ${packet.messageId.take(8)}"
+                )
+                return
+            }
             val needsReply = senderPeer == null || senderPeer.signingPublicKey.isBlank()
             repository.upsertDiscoveredPeer(
                 deviceId = packet.senderId,
