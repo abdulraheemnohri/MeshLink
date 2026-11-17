@@ -243,6 +243,19 @@ class MeshRoutingEngine(
         }
         val settings = repository.getSettingsOnce()
         val expiresAt = System.currentTimeMillis() + settings.defaultMessageTtlHours * 3600_000L
+        val requestedStrategy = strategyOverride ?: runCatching {
+            RoutingStrategy.valueOf(settings.defaultRoutingStrategy)
+        }.getOrDefault(RoutingStrategy.AUTONOMOUS)
+        val reachableGroupMemberCount = repository.getGroupMembersOnce(groupId)
+            .count { member ->
+                member.peerId != local.deviceId &&
+                    member.peerId in activeEndpoints &&
+                    repository.getPeerById(member.peerId)?.let { it.verifiedByQr && !it.blocked } == true
+            }
+        val effectiveStrategy = resolveEffectiveStrategy(
+            requested = requestedStrategy,
+            hasDirectEndpoint = reachableGroupMemberCount > 0
+        )
 
         val payloadJson = JSONObject().apply {
             put("groupId", groupId)
@@ -259,7 +272,7 @@ class MeshRoutingEngine(
                 packetType = PacketType.GROUP_MESSAGE,
                 expiresAt = expiresAt,
                 hopLimit = settings.defaultHopLimit,
-                routingStrategy = strategyOverride ?: RoutingStrategy.EPIDEMIC,
+                routingStrategy = effectiveStrategy,
                 encryptedPayload = encrypted,
                 visitedPeers = listOf(local.deviceId),
                 sprayCopies = settings.sprayCopies
@@ -1106,7 +1119,41 @@ class MeshRoutingEngine(
             )
             return true
         }
-        val directEndpoint = activeEndpoints[packet.destinationId]?.takeIf {
+
+        // Group packets are addressed to a group ID, not a peer endpoint. Resolve only
+        // currently reachable, non-blocked group members for the selected delivery mode.
+        val groupMemberIds = if (packet.packetType == PacketType.GROUP_MESSAGE) {
+            repository.getGroupMembersOnce(packet.destinationId)
+                .asSequence()
+                .filter { it.peerId != localIdentity.deviceId }
+                .filter { member -> repository.getPeerById(member.peerId)?.let { it.verifiedByQr && !it.blocked } == true }
+                .map { it.peerId }
+                .toSet()
+        } else emptySet()
+
+        if (packet.packetType == PacketType.GROUP_MESSAGE &&
+            packet.routingStrategy == RoutingStrategy.DIRECT
+        ) {
+            val reachable = groupMemberIds.mapNotNull { activeEndpoints[it] }
+            var deliveredToPeers = 0
+            reachable.forEach { endpoint ->
+                if (MeshForwardingPolicy.canForwardToNextHop(packet, endpoint.deviceId) &&
+                    sendOverBestTransport(endpoint, packet)
+                ) deliveredToPeers++
+            }
+            if (deliveredToPeers > 0) {
+                repository.updateMessageStatus(packet.messageId, "RELAYED", null, packet.hopCount)
+                repository.logNetworkEvent(
+                    transportType = "MULTI",
+                    eventType = "GROUP_DIRECT",
+                    peerId = packet.destinationId,
+                    summary = "Sent group message directly to $deliveredToPeers currently reachable member(s); no relay or offline queue"
+                )
+            }
+            return deliveredToPeers > 0
+        }
+
+        val directEndpoint = if (packet.packetType == PacketType.GROUP_MESSAGE) null else activeEndpoints[packet.destinationId]?.takeIf {
             MeshForwardingPolicy.canForwardToNextHop(packet, it.deviceId)
         }
 
@@ -1124,6 +1171,8 @@ class MeshRoutingEngine(
             }
         }
 
+        // Group broadcasts use their member set rather than a route to the group ID.
+        if (packet.packetType != PacketType.GROUP_MESSAGE) {
         // Check known multi-hop route
         val route = repository.getBestRoute(packet.destinationId)
         if (route != null) {
@@ -1137,13 +1186,16 @@ class MeshRoutingEngine(
                 }
             }
         }
+        }
 
         // Strategy-driven forwarding. Persist the remaining spray budget, not the original budget.
         var queuedPacket = packet
         when (packet.routingStrategy) {
             RoutingStrategy.EPIDEMIC -> {
                 var relayedCount = 0
-                activeEndpoints.values.filter { !packet.visitedPeers.contains(it.deviceId) }.forEach { ep ->
+                activeEndpoints.values.filter { !packet.visitedPeers.contains(it.deviceId) &&
+                    (packet.packetType != PacketType.GROUP_MESSAGE || it.deviceId in groupMemberIds)
+                }.forEach { ep ->
                     if (sendOverBestTransport(ep, packet)) relayedCount++
                 }
                 if (relayedCount > 0) {
@@ -1153,7 +1205,10 @@ class MeshRoutingEngine(
             RoutingStrategy.SPRAY_AND_WAIT -> {
                 var copiesLeft = packet.sprayCopies
                 if (copiesLeft > 1) {
-                    val candidates = activeEndpoints.values.filter { !packet.visitedPeers.contains(it.deviceId) }
+                    val candidates = activeEndpoints.values.filter {
+                        !packet.visitedPeers.contains(it.deviceId) &&
+                            (packet.packetType != PacketType.GROUP_MESSAGE || it.deviceId in groupMemberIds)
+                    }
                     for (ep in candidates) {
                         if (copiesLeft <= 1) break
                         val half = (copiesLeft / 2).coerceAtLeast(1)
@@ -1931,10 +1986,10 @@ class MeshRoutingEngine(
         hasDirectEndpoint: Boolean
     ): RoutingStrategy {
         if (requested != RoutingStrategy.AUTONOMOUS) return requested
-        if (hasDirectEndpoint) return RoutingStrategy.DIRECT
         val batteryPct = getBatteryPercentage()
         return when {
             batteryPct in 1..20 -> RoutingStrategy.STORE_AND_FORWARD
+            hasDirectEndpoint -> RoutingStrategy.DIRECT
             activeEndpoints.size >= 3 -> RoutingStrategy.SPRAY_AND_WAIT
             activeEndpoints.isNotEmpty() -> RoutingStrategy.EPIDEMIC
             else -> RoutingStrategy.STORE_AND_FORWARD
