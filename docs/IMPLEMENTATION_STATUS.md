@@ -386,3 +386,12 @@ The five message routing modes are available in private and group chat controls 
 The pure RoutingStrategyPolicy has JVM tests for the five modes and autonomous decision boundaries. Transport selection (Automatic / Prefer / Only and per-radio enablement) remains a separate policy and is not changed by selecting a routing mode.
 
 CI and physical acceptance for these latest changes are pending. Real-device verification of group relay behavior and all five modes is still required.
+
+
+## Interactive topology and diagnostics pass (2026-11-17)
+
+- Topology node selection is now available through both canvas tap targets and a keyboard/screen-reader friendly known-node button list.
+- Selected-node inspection shows trust/block/connection state, active transport, identity fingerprint, relay counters, and persisted routes that reference the selected peer. It explicitly reports when no route record exists; it does not infer a path from the drawing.
+- Diagnostics event history now supports free-text search across event summary, transport, type and peer ID, plus event-type filters and an explicit empty state.
+- Event timestamps include the date, and peer IDs are shown when present. Search and filter controls expose stable test tags.
+- These are UI/source improvements. Android accessibility services, screen sizes and radio-driven topology updates still require device acceptance testing.
