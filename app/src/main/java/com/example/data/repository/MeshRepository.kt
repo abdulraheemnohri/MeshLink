@@ -466,8 +466,9 @@ class MeshRepository(
         expectedEpoch: Int,
         issuedAt: Long,
         outbox: List<GroupRoleUpdateEntity>
-    ): List<GroupRoleUpdateEntity> = db.withTransaction {
+    ): List<GroupRoleUpdateEntity> {
         val local = ensureInitialized()
+        return db.withTransaction {
         require(groupDao.getMember(groupId, local.deviceId)?.role == "ADMIN") {
             "Only a group admin can update member roles"
         }
@@ -505,6 +506,7 @@ class MeshRepository(
             summary = "Atomically updated local group role and persisted ${outbox.size} per-recipient delivery records"
         )
         outbox
+        }
     }
 
     suspend fun rotateGroupKey(groupId: String) {
