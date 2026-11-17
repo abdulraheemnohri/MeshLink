@@ -15,6 +15,7 @@ data class TransportPolicy(
         TransportType.LOCAL_LAN,
         TransportType.WIFI_DIRECT,
         TransportType.WIFI_AWARE,
+        TransportType.NEARBY_CONNECTIONS,
         TransportType.BLE
     ),
     val disabled: Set<TransportType> = emptySet(),
