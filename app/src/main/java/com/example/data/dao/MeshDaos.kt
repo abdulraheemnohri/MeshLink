@@ -181,9 +181,6 @@ interface PendingPacketDao {
     @Query("UPDATE pending_packets SET attemptCount = attemptCount + 1, lastAttemptAt = :attemptedAt WHERE messageId = :messageId")
     suspend fun recordAttempt(messageId: String, attemptedAt: Long): Int
 
-    @Query("UPDATE pending_packets SET attemptCount = attemptCount + 1, lastAttemptAt = :attemptedAt WHERE messageId = :messageId")
-    suspend fun recordAttempt(messageId: String, attemptedAt: Long)
-
     @Query("DELETE FROM pending_packets WHERE messageId = :messageId")
     suspend fun deleteById(messageId: String)
 
