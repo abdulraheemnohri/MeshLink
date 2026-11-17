@@ -33,7 +33,7 @@ data class HardwareCapabilityReport(
 )
 
 object HardwareCapabilities {
-    /** Runtime permissions needed for Bluetooth and nearby Wi-Fi transports only. */
+    /** Runtime permissions required to use enabled radio transports on this Android version. */
     fun transportRuntimePermissions(): List<String> {
         val list = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -41,33 +41,61 @@ object HardwareCapabilities {
             list += Manifest.permission.BLUETOOTH_ADVERTISE
             list += Manifest.permission.BLUETOOTH_CONNECT
         } else {
-            list += Manifest.permission.ACCESS_COARSE_LOCATION
+            // Android 11 and earlier require location permission for BLE discovery.
+            list += Manifest.permission.ACCESS_FINE_LOCATION
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             list += Manifest.permission.NEARBY_WIFI_DEVICES
-            list += Manifest.permission.POST_NOTIFICATIONS
         } else {
+            // Wi-Fi Direct / Aware discovery is location-gated on older releases.
             list += Manifest.permission.ACCESS_FINE_LOCATION
         }
         return list.distinct()
     }
 
-    fun requiredRuntimePermissions(): List<String> {
-        val list = mutableListOf<String>()
+    fun cameraRuntimePermissions(): List<String> = listOf(Manifest.permission.CAMERA)
+
+    fun bluetoothRuntimePermissions(): List<String> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            list += Manifest.permission.BLUETOOTH_SCAN
-            list += Manifest.permission.BLUETOOTH_ADVERTISE
-            list += Manifest.permission.BLUETOOTH_CONNECT
+            listOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        } else {
+            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
         }
+
+    fun nearbyWifiRuntimePermissions(): List<String> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            list += Manifest.permission.NEARBY_WIFI_DEVICES
-            list += Manifest.permission.POST_NOTIFICATIONS
+            listOf(Manifest.permission.NEARBY_WIFI_DEVICES)
+        } else {
+            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
         }
-        list += Manifest.permission.ACCESS_FINE_LOCATION
-        list += Manifest.permission.ACCESS_COARSE_LOCATION
-        list += Manifest.permission.RECORD_AUDIO
-        return list.distinct()
-    }
+
+    fun locationRuntimePermissions(): List<String> = listOf(
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    )
+
+    fun audioRuntimePermissions(): List<String> = listOf(Manifest.permission.RECORD_AUDIO)
+
+    fun notificationRuntimePermissions(): List<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            listOf(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            emptyList()
+        }
+
+    /** Union of optional runtime permissions for all user-visible MeshLink features. */
+    fun requiredRuntimePermissions(): List<String> = (
+        cameraRuntimePermissions() +
+            bluetoothRuntimePermissions() +
+            nearbyWifiRuntimePermissions() +
+            locationRuntimePermissions() +
+            audioRuntimePermissions() +
+            notificationRuntimePermissions()
+        ).distinct()
 
     fun hasPermission(context: Context, permission: String): Boolean {
         return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
@@ -79,7 +107,7 @@ object HardwareCapabilities {
                 hasPermission(context, Manifest.permission.BLUETOOTH_ADVERTISE) &&
                 hasPermission(context, Manifest.permission.BLUETOOTH_CONNECT)
         } else {
-            hasPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+            hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
 
