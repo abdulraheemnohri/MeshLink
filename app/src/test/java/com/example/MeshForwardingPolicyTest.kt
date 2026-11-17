@@ -58,7 +58,8 @@ class MeshForwardingPolicyTest {
         assertFalse(MeshForwardingPolicy.hasValidRouteMetadata(packet(hopCount = 33)))
         assertFalse(MeshForwardingPolicy.hasValidRouteMetadata(packet(visited = List(33) { "peer_$it" })))
         assertFalse(MeshForwardingPolicy.hasValidRouteMetadata(packet(visited = listOf("A", "B", "B"))))
-        assertTrue(MeshForwardingPolicy.hasValidRouteMetadata(packet(hopLimit = 32, hopCount = 32)))
+        assertFalse(MeshForwardingPolicy.hasValidRouteMetadata(packet(hopLimit = 32, hopCount = 32)))
+        assertTrue(MeshForwardingPolicy.hasValidRouteMetadata(packet(hopLimit = 0, hopCount = 32)))
     }
 
     @Test
