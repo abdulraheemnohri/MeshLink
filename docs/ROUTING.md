@@ -33,3 +33,12 @@ The pure `MeshForwardingPolicy` helper enforces hop/visited-path decisions and h
 ## Acceptance
 
 Use A-B-C topology: A must not have a direct path to C; B is the only relay. Verify packet delivery, ACK return, duplicate suppression, TTL exhaustion, relay restart and route recovery. Record the build SHA and diagnostics in [TRANSPORT_ACCEPTANCE_RESULTS.md](TRANSPORT_ACCEPTANCE_RESULTS.md).
+
+
+## User-selectable chat connection modes
+
+The private and group chat composer exposes all five routing strategies: Autonomous, Direct, Store & Forward, Epidemic, and Spray & Wait. The selected strategy is persisted in the app's default routing setting and is applied to outgoing private and group message packets. Transport selection remains a separate concern: LAN, Wi-Fi Direct, Wi-Fi Aware, BLE, Bluetooth Classic and Nearby choose the physical path, while the routing strategy governs forwarding behavior.
+
+Autonomous delegates to the existing reachability/battery/queue-aware strategy selector. Direct targets an immediately reachable destination. Store & Forward persists packets for later contact. Epidemic forwards to eligible unvisited peers with replay suppression and hop bounds. Spray & Wait uses the configured copy budget and waits for a direct encounter.
+
+The chat selector is a per-send routing preference shared as the app's default for subsequent chats; it does not change the configured transport adapter policy.
