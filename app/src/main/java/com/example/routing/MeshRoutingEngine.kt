@@ -45,6 +45,13 @@ data class FileChunkIncoming(
     val payloadJson: JSONObject
 )
 
+private data class PendingPrivateText(
+    val text: String,
+    val strategy: RoutingStrategy?,
+    val ttlHours: Int?,
+    val emergency: Boolean
+)
+
 class MeshRoutingEngine(
     private val context: Context,
     private val repository: MeshRepository,
@@ -69,6 +76,10 @@ class MeshRoutingEngine(
 
     private val _incomingFilePacket = MutableSharedFlow<FileChunkIncoming>(extraBufferCapacity = 64)
     val incomingFilePacket: SharedFlow<FileChunkIncoming> = _incomingFilePacket.asSharedFlow()
+
+    private val _sessionEstablished = MutableSharedFlow<String>(extraBufferCapacity = 32)
+    val sessionEstablished: SharedFlow<String> = _sessionEstablished.asSharedFlow()
+    private val pendingPrivateTexts = ConcurrentHashMap<String, MutableList<PendingPrivateText>>()
 
     fun registerTransports(list: List<MeshTransport>) {
         transports.clear()
@@ -115,14 +126,25 @@ class MeshRoutingEngine(
         if (!peer.verifiedByQr || peer.blocked || peer.signingPublicKey.isBlank()) return false
         val session = getActiveEphemeralSession(peerId)
         if (session == null) {
-            initiateEphemeralSession(peerId)
+            if (activeEndpoints[peerId] == null) return false
+            val pending = pendingPrivateTexts.computeIfAbsent(peerId) {
+                java.util.Collections.synchronizedList(mutableListOf())
+            }
+            val item = PendingPrivateText(plaintext, strategyOverride, ttlHoursOverride, isEmergency)
+            pending.add(item)
+            val started = initiateEphemeralSession(peerId)
+            if (!started && getActiveEphemeralSession(peerId) == null) {
+                pending.remove(item)
+                if (pending.isEmpty()) pendingPrivateTexts.remove(peerId, pending)
+                return false
+            }
             repository.logNetworkEvent(
                 transportType = "SECURITY",
                 eventType = "SESSION_REQUIRED",
                 peerId = peerId,
-                summary = "Private message held: negotiating an authenticated short-lived session; retry after the peer responds"
+                summary = "Private message retained in memory and will retry automatically after authenticated session negotiation"
             )
-            return false
+            return true
         }
         val encrypted = "MLSE1:" + crypto.encryptWithSessionKey(payloadJson, session.sendKey)
 
@@ -542,6 +564,44 @@ class MeshRoutingEngine(
         return keys
     }
 
+    suspend fun encryptForPeerSession(peerId: String, plaintext: String): String? {
+        val session = getActiveEphemeralSession(peerId)
+        if (session == null) {
+            initiateEphemeralSession(peerId)
+            return null
+        }
+        return "MLSE1:" + crypto.encryptWithSessionKey(plaintext, session.sendKey)
+    }
+
+    fun decryptFromPeerSession(peerId: String, payload: String): String? {
+        if (!payload.startsWith("MLSE1:")) return null
+        val session = getActiveEphemeralSession(peerId) ?: return null
+        return crypto.decryptWithSessionKey(payload.removePrefix("MLSE1:"), session.receiveKey)
+    }
+
+    private fun retryPendingPrivateTexts(peerId: String) {
+        val pending = pendingPrivateTexts.remove(peerId) ?: return
+        val snapshot = synchronized(pending) { pending.toList().also { pending.clear() } }
+        if (snapshot.isEmpty()) return
+        scope.launch {
+            snapshot.forEach { item ->
+                val sent = sendDirectTextMessage(
+                    peerId = peerId,
+                    plaintext = item.text,
+                    strategyOverride = item.strategy,
+                    ttlHoursOverride = item.ttlHours,
+                    isEmergency = item.emergency
+                )
+                if (!sent) repository.logNetworkEvent(
+                    transportType = "SECURITY",
+                    eventType = "SESSION_RETRY_FAILED",
+                    peerId = peerId,
+                    summary = "Automatic private-message retry failed; user can retry when peer is reachable"
+                )
+            }
+        }
+    }
+
     private suspend fun initiateEphemeralSession(peerId: String): Boolean {
         if (getActiveEphemeralSession(peerId) != null) return true
         val now = System.currentTimeMillis()
@@ -647,6 +707,8 @@ class MeshRoutingEngine(
                 val endpoint = activeEndpoints[packet.senderId] ?: return false
                 if (!sendOverBestTransport(endpoint, responsePacket)) return false
                 installEphemeralSession(packet.senderId, accepted.sessionKeys)
+                _sessionEstablished.tryEmit(packet.senderId)
+                retryPendingPrivateTexts(packet.senderId)
                 repository.logSecurityEvent(
                     eventType = "EPHEMERAL_SESSION_ESTABLISHED",
                     peerId = packet.senderId,
@@ -680,6 +742,8 @@ class MeshRoutingEngine(
                 }
                 pendingEphemeralOfferExpiry.remove(response.sessionId)
                 installEphemeralSession(packet.senderId, keys)
+                _sessionEstablished.tryEmit(packet.senderId)
+                retryPendingPrivateTexts(packet.senderId)
                 repository.logSecurityEvent(
                     eventType = "EPHEMERAL_SESSION_ESTABLISHED",
                     peerId = packet.senderId,
@@ -1417,9 +1481,11 @@ class MeshRoutingEngine(
             }
 
             PacketType.FILE_OFFER, PacketType.FILE_CHUNK -> {
-                val plain = if (senderPeer?.agreementPublicKey?.isNotBlank() == true) {
+                val plain = if (packet.encryptedPayload.startsWith("MLSE1:")) {
+                    decryptFromPeerSession(packet.senderId, packet.encryptedPayload)
+                } else if (senderPeer?.agreementPublicKey?.isNotBlank() == true) {
                     crypto.decryptFromPeer(packet.encryptedPayload, senderPeer.agreementPublicKey, senderPeer.ratchetCounter)
-                } else packet.encryptedPayload
+                } else null
                 val obj = plain?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return
                 _incomingFilePacket.emit(FileChunkIncoming(packet, obj))
             }
