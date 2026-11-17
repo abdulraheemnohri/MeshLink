@@ -664,6 +664,24 @@ fun DiagnosticsScreen(
                     .any { it.contains(eventSearch.trim(), ignoreCase = true) })
         }
     }
+    val context = LocalContext.current
+    var exportStatus by remember { mutableStateOf<String?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { destination ->
+        if (destination != null) {
+            runCatching {
+                val output = context.contentResolver.openOutputStream(destination)
+                    ?: error("Could not open the selected destination")
+                output.bufferedWriter().use { it.write(exportPayload) }
+            }.onSuccess {
+                exportStatus = "Diagnostics CSV exported successfully. Review it before sharing."
+            }.onFailure { error ->
+                exportStatus = "Export failed: ${error.message ?: "storage error"}"
+            }
+        }
+    }
+    var exportPayload by remember { mutableStateOf("") }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { onRefreshCapabilities() }
@@ -770,9 +788,39 @@ fun DiagnosticsScreen(
                     title = "Network Event Console",
                     subtitle = "${filteredEvents.size} shown · ${networkEvents.size} stored",
                     trailing = {
-                        TextButton(onClick = onClearLogs, enabled = networkEvents.isNotEmpty()) { Text("Clear") }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(
+                                onClick = {
+                                    fun csvCell(value: String): String = "\"" + value.replace("\"", "\"\"") + "\""
+                                    exportPayload = buildString {
+                                        appendLine("timestamp,transport,event_type,peer_id,summary")
+                                        filteredEvents.forEach { event ->
+                                            appendLine(listOf(
+                                                csvCell(SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date(event.timestamp))),
+                                                csvCell(event.transportType),
+                                                csvCell(event.eventType),
+                                                csvCell(event.peerId.orEmpty()),
+                                                csvCell(event.summary)
+                                            ).joinToString(","))
+                                        }
+                                    }
+                                    exportStatus = null
+                                    exportLauncher.launch("meshlink-diagnostics-${System.currentTimeMillis()}.csv")
+                                },
+                                enabled = filteredEvents.isNotEmpty()
+                            ) { Text("Export CSV") }
+                            TextButton(onClick = onClearLogs, enabled = networkEvents.isNotEmpty()) { Text("Clear") }
+                        }
                     }
                 )
+                Text(
+                    "Export includes only the currently filtered event records. Check the CSV for private information before sharing.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                exportStatus?.let { status ->
+                    Text(status, style = MaterialTheme.typography.bodySmall, color = if (status.startsWith("Diagnostics CSV")) MeshEmerald else MeshCrimson)
+                }
                 OutlinedTextField(
                     value = eventSearch,
                     onValueChange = { eventSearch = it },
