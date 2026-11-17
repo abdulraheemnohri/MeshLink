@@ -1082,6 +1082,18 @@ class MeshRoutingEngine(
         if (packet.isExpired(now) || packet.hopLimit < 0) return false
         packetReplayStore.rememberIfNew(packet.messageId, packet.expiresAt, now)
         val localIdentity = repository.ensureInitialized()
+        if (packet.destinationId != MeshPacket.BROADCAST_ID &&
+            packet.destinationId != localIdentity.deviceId &&
+            packet.destinationId in packet.visitedPeers
+        ) {
+            repository.logSecurityEvent(
+                eventType = "ROUTE_DESTINATION_ALREADY_VISITED",
+                peerId = packet.destinationId,
+                severity = "WARN",
+                summary = "Dropped packet because its destination already appears in the visited path"
+            )
+            return false
+        }
         if (packet.destinationId == localIdentity.deviceId) {
             repository.updateMessageStatus(packet.messageId, "DELIVERED", null, packet.hopCount)
             repository.logNetworkEvent(
