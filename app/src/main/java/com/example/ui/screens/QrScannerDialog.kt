@@ -20,6 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -117,14 +118,17 @@ private fun QrCameraPreview(
     val delivered = remember { AtomicBoolean(false) }
     val active = remember { AtomicBoolean(true) }
     val executor = remember { Executors.newSingleThreadExecutor() }
+    var cameraError by remember { mutableStateOf<String?>(null) }
+    var retryToken by remember { mutableStateOf(0) }
 
-    DisposableEffect(lifecycleOwner, previewView) {
+    DisposableEffect(lifecycleOwner, previewView, retryToken) {
         val providerFuture = ProcessCameraProvider.getInstance(context)
         val mainExecutor = ContextCompat.getMainExecutor(context)
         active.set(true)
+        cameraError = null
         val listener = Runnable {
             if (!active.get()) return@Runnable
-            runCatching {
+            try {
                 val provider = providerFuture.get()
                 val preview = Preview.Builder().build().also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
@@ -190,6 +194,11 @@ private fun QrCameraPreview(
                     preview,
                     analysis
                 )
+            } catch (error: Exception) {
+                val reason = error.cause?.message ?: error.message ?: "Camera could not start"
+                mainExecutor.execute {
+                    if (active.get()) cameraError = "Camera unavailable: $reason"
+                }
             }
         }
         providerFuture.addListener(listener, mainExecutor)
@@ -207,5 +216,18 @@ private fun QrCameraPreview(
             color = androidx.compose.ui.graphics.Color.White,
             modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)
         )
+    }
+    if (cameraError != null) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(cameraError!!, color = MaterialTheme.colorScheme.error)
+            OutlinedButton(onClick = {
+                delivered.set(false)
+                retryToken++
+            }) { Text("Retry camera") }
+        }
     }
 }
