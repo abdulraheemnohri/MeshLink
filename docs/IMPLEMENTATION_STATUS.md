@@ -395,3 +395,12 @@ CI and physical acceptance for these latest changes are pending. Real-device ver
 - Diagnostics event history now supports free-text search across event summary, transport, type and peer ID, plus event-type filters and an explicit empty state.
 - Event timestamps include the date, and peer IDs are shown when present. Search and filter controls expose stable test tags.
 - These are UI/source improvements. Android accessibility services, screen sizes and radio-driven topology updates still require device acceptance testing.
+
+
+## Peer action safety and diagnostics export (2026-11-17)
+
+- Peer trust-marker changes, block/unblock and disconnect now require an explicit confirmation dialog. Dialog copy explains the scope and retained local records; verification copy reminds users to compare fingerprints through a trusted channel.
+- Diagnostics supports exporting the currently filtered event records to CSV through Android's system document picker. The export contains timestamp, transport, event type, peer ID and summary only; it does not export chat contents, files, keys or credentials.
+- The user chooses the destination. The UI reminds users to review exported diagnostic data before sharing it. Export failures are surfaced in the screen.
+- The onboarding screen already permits continuing without granting every optional capability; users can grant permissions later from Diagnostics/Settings. Validate permission denial, picker cancellation and storage-provider behavior on physical Android versions.
+- Android CI for this source revision is pending; do not treat these source changes as device-validated.
