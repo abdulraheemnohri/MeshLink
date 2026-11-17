@@ -133,7 +133,8 @@ class MeshRoutingEngine(
             val item = PendingPrivateText(plaintext, strategyOverride, ttlHoursOverride, isEmergency)
             pending.add(item)
             val started = initiateEphemeralSession(peerId)
-            if (!started && getActiveEphemeralSession(peerId) == null) {
+            val handshakeAlreadyPending = pendingEphemeralOffers.values.any { it.offer.responderId == peerId }
+            if (!started && getActiveEphemeralSession(peerId) == null && !handshakeAlreadyPending) {
                 pending.remove(item)
                 if (pending.isEmpty()) pendingPrivateTexts.remove(peerId, pending)
                 return false
