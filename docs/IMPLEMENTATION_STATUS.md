@@ -188,3 +188,13 @@ NFC is for short-range identity/bootstrap handoff, not continuous mesh data tran
 - The store fails closed when persistence cannot be committed; invalid, blank, overlong and expired IDs are rejected.
 - Robolectric tests cover persistence across store instances, expiry, invalid IDs and capacity eviction.
 - This is bounded local duplicate suppression, not a replacement for end-to-end delivery acknowledgements or cryptographic replay-resistant session protocols.
+
+
+## Camera QR scanner (November 2026)
+
+- Identity screen now provides an offline camera-based QR scanner using CameraX and the bundled ZXing core decoder.
+- Scanner accepts QR codes only, returns decoded text to the existing identity URI decoder, and does not automatically trust arbitrary scanned content.
+- Camera permission is requested only when the user opens the scanner. The camera use-case is bound while the scanner dialog is active and released on dismissal.
+- Camera hardware is declared optional so devices without a camera can still install and use MeshLink's manual URI import and QR display.
+- No captured image or scan history is persisted.
+- Validation still required: compile/unit CI, permission denial/retry, low-light focus, rotation, and two-device QR identity import on physical Android devices.
