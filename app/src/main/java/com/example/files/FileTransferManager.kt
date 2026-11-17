@@ -446,6 +446,7 @@ class FileTransferManager(
                     repository.upsertFileTransfer(
                         transfer.copy(status = "VERIFIED", completedChunks = transfer.totalChunks, updatedAt = System.currentTimeMillis())
                     )
+                    FileTransferNotifications.completed(context, transferId, transfer.fileName, incoming = false)
                     pendingAcks.remove("$transferId:complete")?.complete(true)
                 }
                 -1 -> pendingAcks.remove("$transferId:offer")?.complete(true)
@@ -606,8 +607,10 @@ class FileTransferManager(
                         updatedAt = System.currentTimeMillis()
                     )
                 )
-                if (verified) sendFileAck(senderId, transferId, -2)
-                else {
+                if (verified) {
+                    FileTransferNotifications.completed(context, transferId, transfer.fileName, incoming = true)
+                    sendFileAck(senderId, transferId, -2)
+                } else {
                     sendFileAck(senderId, transferId, -3)
                     repository.logSecurityEvent(
                     eventType = "FILE_HASH_FAIL",
