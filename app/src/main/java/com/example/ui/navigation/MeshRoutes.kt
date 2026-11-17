@@ -8,6 +8,7 @@ object MeshRoute {
     const val DISCOVERY = "discover"
     const val DISCOVER = DISCOVERY
     const val CONNECTIONS = "connections"
+    const val NETWORK_CONTROL = "network_control"
     const val CHATS = "chats"
     const val PRIVATE_CHAT = "private_chat/{peerId}"
     const val GROUPS = "groups"
