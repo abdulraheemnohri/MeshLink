@@ -270,7 +270,11 @@ class MeshRepository(
     }
 
     suspend fun markAllDisconnected() {
-        peerDao.markAllDisconnected()
+        val now = System.currentTimeMillis()
+        db.withTransaction {
+            peerDao.markAllDisconnected()
+            connectionDao.closeAllActiveConnections(now)
+        }
     }
 
     suspend fun setPeerVerified(deviceId: String, verified: Boolean) {
@@ -783,6 +787,10 @@ class MeshRepository(
 
     suspend fun getPendingPacketById(messageId: String): PendingPacketEntity? =
         pendingPacketDao.getById(messageId)
+
+    suspend fun recordPendingPacketAttempt(messageId: String, attemptedAt: Long = System.currentTimeMillis()) {
+        pendingPacketDao.recordAttempt(messageId, attemptedAt)
+    }
 
     suspend fun removePendingPacket(messageId: String) {
         pendingPacketDao.deleteById(messageId)
