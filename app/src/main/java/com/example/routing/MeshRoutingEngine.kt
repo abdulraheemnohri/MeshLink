@@ -383,7 +383,7 @@ class MeshRoutingEngine(
         var waiting = 0
         unresolved.forEach { oldRecord ->
             val retryNow = System.currentTimeMillis()
-            if (oldRecord.status in setOf("QUEUED", "SENT") &&
+            if (oldRecord.status in setOf("QUEUED", "SENT", "FAILED") &&
                 retryNow - oldRecord.updatedAt < GROUP_ROLE_UPDATE_RETRY_INTERVAL_MS
             ) {
                 waiting++
