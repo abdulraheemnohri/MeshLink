@@ -71,6 +71,9 @@ jobs:
       - name: Run unit tests
         run: ./gradlew --no-daemon --stacktrace testDebugUnitTest
 
+      - name: Run Android lint
+        run: ./gradlew --no-daemon --stacktrace lintDebug
+
       - name: Verify Room schema export
         run: |
           find app/schemas -maxdepth 4 -type f -print
