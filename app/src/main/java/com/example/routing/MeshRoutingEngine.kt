@@ -1044,14 +1044,36 @@ class MeshRoutingEngine(
                     crypto.decryptFromPeer(packet.encryptedPayload, senderPeer.agreementPublicKey, senderPeer.ratchetCounter)
                 } else return
                 val obj = runCatching { JSONObject(plain) }.getOrNull() ?: return
+                val groupId = obj.optString("groupId")
+                val createdBy = obj.optString("by", packet.senderId)
+                val groupKey = obj.optString("key")
+                if (groupId.isBlank() || createdBy != packet.senderId || !crypto.isValidGroupKeyB64(groupKey)) {
+                    repository.logSecurityEvent(
+                        eventType = "GROUP_INVITE_REJECTED",
+                        peerId = packet.senderId,
+                        severity = "WARN",
+                        summary = "Rejected malformed group invite or creator identity mismatch"
+                    )
+                    return
+                }
+                val existingGroup = repository.getGroupById(groupId)
+                if (existingGroup != null && !repository.isGroupAdmin(groupId, packet.senderId)) {
+                    repository.logSecurityEvent(
+                        eventType = "GROUP_INVITE_REJECTED",
+                        peerId = packet.senderId,
+                        severity = "WARN",
+                        summary = "Rejected group invite from a non-admin member"
+                    )
+                    return
+                }
                 val invite = MeshCryptoEngine.GroupInvitePayload(
-                    groupId = obj.getString("groupId"),
-                    name = obj.getString("name"),
+                    groupId = groupId,
+                    name = obj.optString("name", "Community Group"),
                     description = obj.optString("desc", ""),
                     category = obj.optString("cat", "COMMUNITY"),
-                    groupKeyB64 = obj.getString("key"),
+                    groupKeyB64 = groupKey,
                     epoch = obj.optInt("epoch", 1),
-                    createdBy = obj.optString("by", packet.senderId)
+                    createdBy = createdBy
                 )
                 repository.joinGroupFromInvite(invite)
                 sendDeliveryAck(packet.senderId, packet.messageId)
