@@ -204,11 +204,59 @@ class MeshRoutingEngine(
         return dispatchPacket(packet)
     }
 
+    suspend fun rotateGroupKeyAndDistribute(groupId: String): Pair<Int, Int> {
+        val (group, members) = repository.rotateGroupKeyForDistribution(groupId)
+        return distributeGroupKeyUpdate(group, members, revokedPeerId = null)
+    }
+
+    suspend fun removeGroupMemberAndRotate(groupId: String, peerId: String): Pair<Int, Int> {
+        val (group, remainingMembers) = repository.removeGroupMemberAndRotate(groupId, peerId)
+        return distributeGroupKeyUpdate(group, remainingMembers, revokedPeerId = peerId)
+    }
+
+    private suspend fun distributeGroupKeyUpdate(
+        group: com.example.data.entities.GroupEntity,
+        members: List<com.example.data.entities.GroupMemberEntity>,
+        revokedPeerId: String?
+    ): Pair<Int, Int> {
+        val local = repository.ensureInitialized()
+        val recipients = members.filter { it.peerId != local.deviceId }
+        var queuedOrSent = 0
+        recipients.forEach { member ->
+            val peer = repository.getPeerById(member.peerId) ?: return@forEach
+            if (!peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) return@forEach
+            val payload = JSONObject().apply {
+                put("groupId", group.groupId)
+                put("epoch", group.keyEpoch)
+                put("key", group.groupSymmetricKeyB64)
+                put("revokedPeerId", revokedPeerId ?: "")
+            }.toString()
+            val packet = crypto.signPacket(
+                MeshPacket(
+                    senderId = local.deviceId,
+                    destinationId = member.peerId,
+                    packetType = PacketType.GROUP_KEY_UPDATE,
+                    routingStrategy = RoutingStrategy.STORE_AND_FORWARD,
+                    encryptedPayload = crypto.encryptForPeer(payload, peer.agreementPublicKey, peer.ratchetCounter),
+                    visitedPeers = listOf(local.deviceId),
+                    priority = MeshPacket.PRIORITY_HIGH
+                )
+            )
+            if (dispatchPacket(packet)) queuedOrSent++
+        }
+        repository.logSecurityEvent(
+            eventType = "GROUP_KEY_UPDATE_DISTRIBUTION",
+            severity = if (queuedOrSent == recipients.size) "INFO" else "WARN",
+            summary = "Group epoch ${group.keyEpoch}: queued/sent update to $queuedOrSent of ${recipients.size} remaining member(s); delivery acknowledgements are asynchronous"
+        )
+        return queuedOrSent to recipients.size
+    }
     suspend fun sendGroupInvite(groupId: String, peerId: String): Boolean {
         val local = repository.ensureInitialized()
         val group = repository.getGroupById(groupId) ?: return false
         val peer = repository.getPeerById(peerId) ?: return false
-        if (peer.agreementPublicKey.isBlank()) return false
+        if (!repository.isGroupAdmin(groupId, local.deviceId)) return false
+        if (!peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) return false
 
         val inviteJson = JSONObject().apply {
             put("groupId", group.groupId)
@@ -990,7 +1038,8 @@ class MeshRoutingEngine(
             }
 
             PacketType.GROUP_INVITE -> {
-                val plain = if (senderPeer?.agreementPublicKey?.isNotBlank() == true) {
+                if (senderPeer?.verifiedByQr != true || senderPeer.blocked) return
+                val plain = if (senderPeer.agreementPublicKey.isNotBlank()) {
                     crypto.decryptFromPeer(packet.encryptedPayload, senderPeer.agreementPublicKey, senderPeer.ratchetCounter)
                 } else return
                 val obj = runCatching { JSONObject(plain) }.getOrNull() ?: return
@@ -1005,6 +1054,44 @@ class MeshRoutingEngine(
                 )
                 repository.joinGroupFromInvite(invite)
                 sendDeliveryAck(packet.senderId, packet.messageId)
+            }
+
+            PacketType.GROUP_KEY_UPDATE -> {
+                if (senderPeer?.verifiedByQr != true || senderPeer.blocked) return
+                val plain = crypto.decryptFromPeer(
+                    packet.encryptedPayload,
+                    senderPeer.agreementPublicKey,
+                    senderPeer.ratchetCounter
+                ) ?: return
+                val obj = runCatching { JSONObject(plain) }.getOrNull() ?: return
+                val groupId = obj.optString("groupId")
+                val epoch = obj.optInt("epoch", -1)
+                val key = obj.optString("key")
+                val revoked = obj.optString("revokedPeerId").takeIf { it.isNotBlank() }
+                if (groupId.isBlank() || epoch <= 0 || key.isBlank()) return
+                val applied = repository.applyGroupKeyUpdate(
+                    groupId = groupId,
+                    epoch = epoch,
+                    groupKeyB64 = key,
+                    senderId = packet.senderId,
+                    revokedPeerId = revoked
+                )
+                if (applied) {
+                    repository.logNetworkEvent(
+                        transportType = transportType.name,
+                        eventType = "GROUP_KEY_EPOCH_APPLIED",
+                        peerId = packet.senderId,
+                        summary = "Applied group $groupId key epoch $epoch"
+                    )
+                    sendDeliveryAck(packet.senderId, packet.messageId)
+                } else {
+                    repository.logSecurityEvent(
+                        eventType = "GROUP_KEY_UPDATE_REJECTED",
+                        peerId = packet.senderId,
+                        severity = "WARN",
+                        summary = "Rejected unauthorized, stale or malformed group key update"
+                    )
+                }
             }
 
             PacketType.GROUP_MESSAGE -> {
