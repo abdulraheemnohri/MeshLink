@@ -150,6 +150,9 @@ class AppDatabaseTest {
         assertEquals("ADMIN", dao.getRoleUpdateByPacketId("role_packet_1")?.role)
 
         dao.updateRoleUpdateStatus("role_packet_1", "ACKED", 5678L, 5678L)
+        // A late sender-side SENT/FAILED update must never overwrite a fast ACK.
+        dao.updateRoleUpdateStatus("role_packet_1", "SENT", 6000L, null)
+        assertEquals("ACKED", dao.getRoleUpdateByPacketId("role_packet_1")?.status)
         assertEquals(1, dao.countUnacknowledgedRoleUpdates("role_group"))
         assertTrue(dao.getUnresolvedRoleUpdatesForPeer("recipient_1").isEmpty())
         assertEquals(5678L, dao.getRoleUpdateByPacketId("role_packet_1")?.acknowledgedAt)
