@@ -104,6 +104,15 @@ fun ChatsHubScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var showCreateGroupDialog by remember { mutableStateOf(false) }
     var showJoinGroupDialog by remember { mutableStateOf(false) }
+    var groupSearch by remember { mutableStateOf("") }
+    var groupCategory by remember { mutableStateOf("ALL") }
+    val visibleGroups = remember(groups, groupSearch, groupCategory) {
+        groups.filter { group ->
+            (groupCategory == "ALL" || group.category == groupCategory) &&
+                (groupSearch.isBlank() || group.name.contains(groupSearch, true) ||
+                    group.description.contains(groupSearch, true) || group.inviteCode.contains(groupSearch, true))
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -223,6 +232,25 @@ fun ChatsHubScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         item {
+                            OutlinedTextField(
+                                value = groupSearch,
+                                onValueChange = { groupSearch = it.take(80) },
+                                modifier = Modifier.fillMaxWidth().testTag("group_list_search"),
+                                placeholder = { Text("Search groups by name, description or code") },
+                                singleLine = true
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                (listOf("ALL") + listOf("COMMUNITY", "EVENT", "NEIGHBORHOOD", "RESCUE")).forEach { category ->
+                                    FilterChip(
+                                        selected = groupCategory == category,
+                                        onClick = { groupCategory = category },
+                                        label = { Text(category) }
+                                    )
+                                }
+                            }
+                        }
+                        item {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
                                     onClick = { showJoinGroupDialog = true },
@@ -279,7 +307,7 @@ fun ChatsHubScreen(
                                 }
                             }
                         } else {
-                            items(groups, key = { it.groupId }) { group ->
+                            items(visibleGroups, key = { it.groupId }) { group ->
                                 val lastMsg = allMessages.firstOrNull { it.conversationId == group.groupId }
                                 GlassPanel(
                                     accentColor = ElectricTeal,
@@ -362,7 +390,7 @@ fun ChatsHubScreen(
                     )
                     if (peers.isNotEmpty()) {
                         Text("Invite Peers:", style = MaterialTheme.typography.labelMedium)
-                        peers.filter { !it.blocked }.take(5).forEach { peer ->
+                        peers.filter { it.verifiedByQr && !it.blocked }.take(12).forEach { peer ->
                             val checked = selectedMembers.contains(peer)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -786,7 +814,7 @@ fun GroupChatScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        "Role changes are disabled until role updates can be synchronized and acknowledged by every group member.",
+                        "Only administrators can change roles or remove members. Updates are authenticated and delivered to members when their devices reconnect.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -801,7 +829,7 @@ fun GroupChatScreen(
                                 Text(member.role, style = MaterialTheme.typography.labelSmall, color = NeonCyan)
                             }
                             Row {
-                                IconButton(onClick = { onToggleRole(member) }, enabled = false) {
+                                IconButton(onClick = { onToggleRole(member) }, enabled = member.role != "ADMIN" || members.count { it.role == "ADMIN" } > 1) {
                                     Icon(Icons.Filled.AdminPanelSettings, contentDescription = "Toggle role", tint = ElectricTeal)
                                 }
                                 IconButton(onClick = { onRemoveMember(member.peerId) }) {
