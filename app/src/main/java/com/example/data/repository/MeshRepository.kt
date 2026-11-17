@@ -376,6 +376,14 @@ class MeshRepository(
         groupDao.upsertMember(
             GroupMemberEntity(
                 groupId = group.groupId,
+                peerId = invite.createdBy,
+                peerAlias = peerDao.getPeerById(invite.createdBy)?.alias ?: invite.createdBy,
+                role = "ADMIN"
+            )
+        )
+        groupDao.upsertMember(
+            GroupMemberEntity(
+                groupId = group.groupId,
                 peerId = local.deviceId,
                 peerAlias = local.alias,
                 role = "MEMBER"
