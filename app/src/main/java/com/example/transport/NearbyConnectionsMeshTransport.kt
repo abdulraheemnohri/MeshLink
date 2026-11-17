@@ -126,9 +126,9 @@ class NearbyConnectionsMeshTransport(
         val advertising = AdvertisingOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()
         val discovering = DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build()
         client.startAdvertising(identity.deviceId, SERVICE_ID, lifecycle, advertising).await()
+        isRunning = true
         try {
             client.startDiscovery(SERVICE_ID, discovery, discovering).await()
-            isRunning = true
             log("STARTED", "Nearby Connections advertising and discovery active")
         } catch (error: Exception) {
             runCatching { client.stopAdvertising().await() }
