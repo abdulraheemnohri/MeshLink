@@ -285,6 +285,7 @@ class MeshRoutingEngine(
         require(targetPeerId != local.deviceId || role == "ADMIN") { "The current admin cannot demote itself" }
         val issuedAt = System.currentTimeMillis()
         repository.updateGroupMemberRole(groupId, targetPeerId, role, issuedAt)
+        repository.supersedeOlderGroupRoleUpdatesForTarget(groupId, targetPeerId, issuedAt)
         val payload = JSONObject().apply {
             put("groupId", groupId)
             put("targetPeerId", targetPeerId)
@@ -451,6 +452,7 @@ class MeshRoutingEngine(
         val local = repository.ensureInitialized()
         val recipients = members.filter { it.peerId != local.deviceId }
         repository.supersedeOlderGroupKeyUpdates(group.groupId, group.keyEpoch)
+        repository.supersedeOlderGroupRoleUpdates(group.groupId, group.keyEpoch)
         var queuedOrSent = 0
         recipients.forEach { member ->
             val peer = repository.getPeerById(member.peerId)
