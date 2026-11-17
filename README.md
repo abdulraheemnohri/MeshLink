@@ -85,7 +85,12 @@ A GitHub Actions workflow is provided at `.github/workflows/android-ci.yml`. It 
 - [Automated and physical-device test plan](docs/TEST_PLAN.md)
 - [Android APK installation and signing troubleshooting](docs/ANDROID_INSTALLATION.md)
 - [Full project audit and remaining release gates](docs/PROJECT_AUDIT.md)
-- [Security policy](SECURITY.md), when present in this repository
+- [Packet-level security review and encryption matrix](docs/SECURITY_REVIEW.md)
+- [Multi-device acceptance plan](docs/MULTI_DEVICE_ACCEPTANCE_TESTS.md)
+- [Physical transport acceptance results](docs/TRANSPORT_ACCEPTANCE_RESULTS.md)
+- [Signed Android release and signing-key management](docs/ANDROID_RELEASE.md)
+- [Routing invariants and multi-hop behavior](docs/ROUTING.md)
+- [Security policy](SECURITY.md)
 
 ## Contributing
 
