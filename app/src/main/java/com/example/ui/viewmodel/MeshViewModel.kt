@@ -574,6 +574,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 previous.localLanEnabled != updated.localLanEnabled ||
                 previous.bleEnabled != updated.bleEnabled ||
                 previous.bluetoothClassicEnabled != updated.bluetoothClassicEnabled ||
+                previous.nearbyConnectionsEnabled != updated.nearbyConnectionsEnabled ||
                 previous.wifiDirectEnabled != updated.wifiDirectEnabled ||
                 previous.wifiAwareEnabled != updated.wifiAwareEnabled
 
