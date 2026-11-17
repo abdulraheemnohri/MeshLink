@@ -20,6 +20,7 @@ import com.example.core.protocol.MeshPacket
 import com.example.core.protocol.MeshPacketCodec
 import com.example.core.protocol.BleFrameCodec
 import com.example.core.protocol.TransportType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +54,7 @@ class WifiAwareTransport(
     private val incomingFrames = ConcurrentHashMap<String, BleFrameCodec.Reassembler>()
     private val pendingSends = ConcurrentHashMap<Int, CompletableDeferred<Boolean>>()
     private val nextSendId = java.util.concurrent.atomic.AtomicInteger(1)
+    private val lifecycleGeneration = java.util.concurrent.atomic.AtomicLong(0L)
 
     @SuppressLint("MissingPermission")
     override suspend fun start() {
@@ -71,14 +73,20 @@ class WifiAwareTransport(
         }
 
         isRunning = true
+        val generation = lifecycleGeneration.incrementAndGet()
         val mainHandler = Handler(Looper.getMainLooper())
         awareManager.attach(object : AttachCallback() {
             override fun onAttached(awareSession: WifiAwareSession) {
+                if (!isRunning || lifecycleGeneration.get() != generation) {
+                    runCatching { awareSession.close() }
+                    return
+                }
                 session = awareSession
-                startPublishAndSubscribe(awareSession, mainHandler)
+                startPublishAndSubscribe(awareSession, mainHandler, generation)
             }
 
             override fun onAttachFailed() {
+                if (lifecycleGeneration.get() != generation) return
                 isRunning = false
                 _events.tryEmit(
                     TransportEvent.Log(
@@ -92,8 +100,8 @@ class WifiAwareTransport(
     }
 
     @SuppressLint("MissingPermission")
-    private fun startPublishAndSubscribe(awareSession: WifiAwareSession, handler: Handler) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    private fun startPublishAndSubscribe(awareSession: WifiAwareSession, handler: Handler, generation: Long) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !isRunning || lifecycleGeneration.get() != generation) return
         val local = localIdentityProvider()
         val pubConfig = PublishConfig.Builder()
             .setServiceName(SERVICE_NAME)
@@ -102,6 +110,10 @@ class WifiAwareTransport(
 
         awareSession.publish(pubConfig, object : DiscoverySessionCallback() {
             override fun onPublishStarted(session: PublishDiscoverySession) {
+                if (!isRunning || lifecycleGeneration.get() != generation) {
+                    runCatching { session.close() }
+                    return
+                }
                 publishSession = session
                 _events.tryEmit(
                     TransportEvent.Log(
@@ -113,15 +125,15 @@ class WifiAwareTransport(
             }
 
             override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
-                handleIncomingBytes(peerHandle, message)
+                if (isRunning && lifecycleGeneration.get() == generation) handleIncomingBytes(peerHandle, message)
             }
 
             override fun onMessageSendSucceeded(messageId: Int) {
-                pendingSends.remove(messageId)?.complete(true)
+                if (lifecycleGeneration.get() == generation) pendingSends.remove(messageId)?.complete(true)
             }
 
             override fun onMessageSendFailed(messageId: Int) {
-                pendingSends.remove(messageId)?.complete(false)
+                if (lifecycleGeneration.get() == generation) pendingSends.remove(messageId)?.complete(false)
                 _events.tryEmit(
                     TransportEvent.Log(
                         transportType = TransportType.WIFI_AWARE,
@@ -138,6 +150,10 @@ class WifiAwareTransport(
 
         awareSession.subscribe(subConfig, object : DiscoverySessionCallback() {
             override fun onSubscribeStarted(session: SubscribeDiscoverySession) {
+                if (!isRunning || lifecycleGeneration.get() != generation) {
+                    runCatching { session.close() }
+                    return
+                }
                 subscribeSession = session
             }
 
@@ -146,6 +162,7 @@ class WifiAwareTransport(
                 serviceSpecificInfo: ByteArray,
                 matchFilter: MutableList<ByteArray>
             ) {
+                if (!isRunning || lifecycleGeneration.get() != generation) return
                 val peerId = String(serviceSpecificInfo, Charsets.UTF_8).ifBlank {
                     "aware_${peerHandle.hashCode()}"
                 }
@@ -172,7 +189,7 @@ class WifiAwareTransport(
             }
 
             override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
-                handleIncomingBytes(peerHandle, message)
+                if (isRunning && lifecycleGeneration.get() == generation) handleIncomingBytes(peerHandle, message)
             }
 
             override fun onMessageSendSucceeded(messageId: Int) {
@@ -220,6 +237,7 @@ class WifiAwareTransport(
 
     override suspend fun stop() {
         isRunning = false
+        lifecycleGeneration.incrementAndGet()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             runCatching { publishSession?.close() }
             runCatching { subscribeSession?.close() }
@@ -254,6 +272,8 @@ class WifiAwareTransport(
                 val queued = try {
                     sub.sendMessage(handle, messageId, frame)
                     true
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (_: Exception) {
                     false
                 }
