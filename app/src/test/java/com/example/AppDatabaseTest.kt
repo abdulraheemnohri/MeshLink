@@ -181,8 +181,10 @@ class AppDatabaseTest {
         )
 
         assertEquals(0, dao.getById("queued-retry")?.attemptCount)
-        assertEquals(1, dao.recordAttempt("queued-retry", 100_000L))
-        assertEquals(1, dao.recordAttempt("queued-retry", 130_000L))
+        assertEquals(1, dao.claimAttempt("queued-retry", 0, 0L, 100_000L))
+        // A concurrent worker holding the old snapshot cannot claim the same row.
+        assertEquals(0, dao.claimAttempt("queued-retry", 0, 0L, 110_000L))
+        assertEquals(1, dao.claimAttempt("queued-retry", 1, 100_000L, 130_000L))
 
         val recovered = dao.getById("queued-retry")
         assertEquals(2, recovered?.attemptCount)
