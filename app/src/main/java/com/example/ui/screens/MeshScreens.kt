@@ -316,6 +316,18 @@ fun ConnectionsScreen(
     onToggleVerify: (PeerEntity) -> Unit,
     onToggleBlock: (PeerEntity) -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    var peerFilter by remember { mutableStateOf("ALL") }
+    val filteredPeers = peers.filter { peer ->
+        val matchesQuery = searchQuery.isBlank() || peer.alias.contains(searchQuery, ignoreCase = true) || peer.deviceId.contains(searchQuery, ignoreCase = true) || peer.fingerprint.contains(searchQuery, ignoreCase = true)
+        val matchesFilter = when (peerFilter) {
+            "ONLINE" -> peer.isConnected && !peer.blocked
+            "VERIFIED" -> peer.verifiedByQr && !peer.blocked
+            "BLOCKED" -> peer.blocked
+            else -> true
+        }
+        matchesQuery && matchesFilter
+    }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier
@@ -326,9 +338,23 @@ fun ConnectionsScreen(
         ) {
             item {
                 SectionTitle(
-                    title = "Active & Historical Links",
-                    subtitle = "${peers.count { it.isConnected }} active peers • ${connections.size} recorded sessions"
+                    title = "People & Trusted Peers",
+                    subtitle = "${peers.count { it.isConnected }} online • ${peers.count { it.verifiedByQr && !it.blocked }} verified • ${peers.size} total"
                 )
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search people, device ID or fingerprint") },
+                    singleLine = true
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("ALL", "ONLINE", "VERIFIED", "BLOCKED").forEach { filter ->
+                        TextButton(onClick = { peerFilter = filter }) {
+                            Text(if (peerFilter == filter) "• $filter" else filter)
+                        }
+                    }
+                }
             }
 
             if (peers.isEmpty()) {
@@ -341,8 +367,14 @@ fun ConnectionsScreen(
                         )
                     }
                 }
+            } else if (filteredPeers.isEmpty()) {
+                item {
+                    GlassPanel(accentColor = ElectricTeal) {
+                        Text("No peers match this search or filter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             } else {
-                items(peers, key = { it.deviceId }) { peer ->
+                items(filteredPeers, key = { it.deviceId }) { peer ->
                     GlassPanel(
                         accentColor = if (peer.blocked) MeshCrimson else if (peer.isConnected) MeshEmerald else MeshAmber
                     ) {
