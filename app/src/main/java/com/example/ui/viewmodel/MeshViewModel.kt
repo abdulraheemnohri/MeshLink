@@ -433,6 +433,20 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun retryGroupKeyUpdates(groupId: String) {
+        viewModelScope.launch {
+            runCatching { routingEngine.retryPendingGroupKeyUpdates(groupId) }
+                .onSuccess { (retried, waiting) ->
+                    _snackMessages.tryEmit(
+                        "Group key recovery: $retried update(s) retried; $waiting member(s) still waiting for a trusted connection."
+                    )
+                }
+                .onFailure { error ->
+                    _snackMessages.tryEmit("Could not retry group key updates: ${error.message ?: "operation failed"}")
+                }
+        }
+    }
+
     fun sendEmergencyBroadcast(message: String, attachLocation: Boolean) {
         if (message.isBlank()) return
         viewModelScope.launch {
