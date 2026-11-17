@@ -50,10 +50,10 @@ MeshLink does not provide unlimited range. Multi-hop communication requires othe
 
 ## Build
 
-The repository currently does not include the Gradle Wrapper scripts or wrapper JAR. Install JDK 21 and Gradle 9.3.1, then run:
+Install JDK 21. The repository includes the official Gradle 9.3.1 Wrapper, so a separate Gradle installation is not required.
 
 ```bash
-gradle --version
+./gradlew --version
 
 # Generate the local debug key expected by app/build.gradle.kts (do not use for release signing).
 keytool -genkeypair -v \
@@ -66,8 +66,8 @@ keytool -genkeypair -v \
   -validity 10000 \
   -dname "CN=Android Debug,O=Android,C=US"
 
-gradle --no-daemon assembleDebug
-gradle --no-daemon testDebugUnitTest
+./gradlew --no-daemon assembleDebug
+./gradlew --no-daemon testDebugUnitTest
 ```
 
 The debug APK is normally generated at:
@@ -76,7 +76,7 @@ The debug APK is normally generated at:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-A GitHub Actions workflow is provided at `.github/workflows/android-ci.yml`. It installs the declared Gradle version and runs the debug build and unit tests. The workflow result must be checked before treating a change as build-verified.
+GitHub Actions verifies the wrapper, compiles the debug APK and runs unit tests. Check the workflow result for the exact commit before treating a change as build-verified.
 
 ## Development documentation
 
