@@ -578,6 +578,13 @@ class MeshRepository(
         return true
     }
 
+    suspend fun markGroupKeyUpdateSuperseded(packetId: String) {
+        groupDao.updateKeyUpdateStatus(packetId, "SUPERSEDED", System.currentTimeMillis(), null)
+    }
+
+    suspend fun getUnresolvedGroupKeyUpdates(groupId: String): List<GroupKeyUpdateEntity> =
+        groupDao.getUnresolvedKeyUpdates(groupId)
+
     suspend fun hasUnacknowledgedGroupKeyUpdates(groupId: String): Boolean =
         groupDao.countUnacknowledgedKeyUpdates(groupId) > 0
 
