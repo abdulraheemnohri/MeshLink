@@ -202,10 +202,18 @@ fun TransferManagerScreen(
     transfers: List<FileTransferEntity>,
     onPause: (String) -> Unit,
     onResume: (String) -> Unit,
-    onExport: (String) -> Unit
+    onExport: (String, Uri) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("ALL") }
+    var pendingExportId by remember { mutableStateOf<String?>(null) }
+    val exportPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val transferId = pendingExportId
+        if (uri != null && transferId != null) onExport(transferId, uri)
+        pendingExportId = null
+    }
     val activeCount = transfers.count { it.status == "TRANSFERRING" }
     val verifiedCount = transfers.count { it.status == "VERIFIED" || it.status == "COMPLETED" }
     val attentionCount = transfers.count { it.status == "PAUSED" || it.status == "FAILED" }
@@ -323,7 +331,7 @@ fun TransferManagerScreen(
                         xfer = xfer,
                         onPause = { onPause(xfer.transferId) },
                         onResume = { onResume(xfer.transferId) },
-                        onExport = { onExport(xfer.transferId) },
+                        onExport = { pendingExportId = xfer.transferId; exportPicker.launch(xfer.fileName) },
                         showControls = true
                     )
                 }
