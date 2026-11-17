@@ -1172,7 +1172,7 @@ class MeshRoutingEngine(
         }
 
         // Direct mode is intentionally one-hop only: never fall back to relays or an offline queue.
-        if (packet.routingStrategy == RoutingStrategy.DIRECT) return false
+        if (!RoutingStrategyPolicy.allowsOfflineQueue(packet.routingStrategy)) return false
 
         // Group broadcasts use their member set rather than a route to the group ID.
         if (packet.packetType != PacketType.GROUP_MESSAGE) {
@@ -1567,8 +1567,8 @@ class MeshRoutingEngine(
         bridgePacketIfConfigured(packet, transportType, senderPeer?.verifiedByQr == true)
 
         // Direct mode is strictly one-hop. Other modes may participate in multi-hop relay.
-        val forwarded = if (packet.routingStrategy == RoutingStrategy.DIRECT) null
-            else MeshForwardingPolicy.forwardForRelay(packet, local.deviceId)
+        val forwarded = if (RoutingStrategyPolicy.allowsRelay(packet.routingStrategy))
+            MeshForwardingPolicy.forwardForRelay(packet, local.deviceId) else null
         if (forwarded != null) {
             val sentOrQueued = dispatchPacket(forwarded)
             if (sentOrQueued) {
@@ -1990,14 +1990,11 @@ class MeshRoutingEngine(
         hasDirectEndpoint: Boolean
     ): RoutingStrategy {
         if (requested != RoutingStrategy.AUTONOMOUS) return requested
-        val batteryPct = getBatteryPercentage()
-        return when {
-            batteryPct in 1..20 -> RoutingStrategy.STORE_AND_FORWARD
-            hasDirectEndpoint -> RoutingStrategy.DIRECT
-            activeEndpoints.size >= 3 -> RoutingStrategy.SPRAY_AND_WAIT
-            activeEndpoints.isNotEmpty() -> RoutingStrategy.EPIDEMIC
-            else -> RoutingStrategy.STORE_AND_FORWARD
-        }
+        return RoutingStrategyPolicy.resolveAutonomous(
+            hasDirectEndpoint = hasDirectEndpoint,
+            batteryPercent = getBatteryPercentage(),
+            activePeerCount = activeEndpoints.size
+        )
     }
 
     private fun getBatteryPercentage(): Int {
