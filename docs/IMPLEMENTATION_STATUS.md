@@ -434,3 +434,12 @@ CI and physical acceptance for these latest changes are pending. Real-device ver
 - Existing PendingPacketRetryPolicy and DAO tests already cover persisted attempt counters, timestamps, exponential backoff, clock rollback, and retry boundaries; no duplicate retry policy was introduced.
 - Delivery remains at-least-once across a crash between radio send and local ACK persistence. Receivers must retain duplicate suppression/idempotent handling; this is not a claim of exactly-once delivery.
 - Remaining validation: Android CI; kill the app process with queued packets, relaunch and confirm the outbox survives; reconnect two physical devices and confirm eventual ACK/removal; verify no stale connected UI state before rediscovery.
+
+
+## DTN retry concurrency hardening (2026-11-17)
+
+- Queue flushing is serialized within the routing engine with a coroutine mutex. The lock is always released in a finally block, including cancellation and early returns.
+- Before sending, each retry atomically claims the exact persisted outbox revision using message ID, expected attempt count, and expected previous-attempt timestamp. A second worker with a stale snapshot cannot claim or transmit the same queued row concurrently.
+- Attempt metadata is committed before radio I/O. A process death after the claim therefore retains the backoff window instead of causing an immediate retry storm.
+- Added a Room regression assertion proving the first worker claim succeeds, a stale competing claim is rejected, and a fresh revision can be claimed afterward.
+- This reduces concurrent duplicate sends; it does not make radio delivery exactly-once. A crash after a receiver accepts a packet but before the sender records completion can still cause a later retry, so packet-ID replay suppression and idempotent receive handling remain required.
