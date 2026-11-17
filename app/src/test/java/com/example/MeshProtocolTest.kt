@@ -46,6 +46,34 @@ class MeshProtocolTest {
     }
 
     @Test
+    fun routingStrategies_allFiveModesRoundTripThroughPacketCodec() {
+        val strategies = listOf(
+            RoutingStrategy.AUTONOMOUS,
+            RoutingStrategy.DIRECT,
+            RoutingStrategy.STORE_AND_FORWARD,
+            RoutingStrategy.EPIDEMIC,
+            RoutingStrategy.SPRAY_AND_WAIT
+        )
+        assertEquals(5, RoutingStrategy.entries.size)
+        strategies.forEach { strategy ->
+            val packet = MeshPacket(
+                senderId = "node_sender",
+                destinationId = "node_receiver",
+                packetType = PacketType.MESSAGE,
+                routingStrategy = strategy,
+                encryptedPayload = "mode-test"
+            )
+            val decoded = MeshPacketCodec.decode(MeshPacketCodec.encode(packet))
+            assertNotNull(decoded)
+            assertEquals(strategy, decoded!!.routingStrategy)
+        }
+        assertEquals(
+            listOf("Autonomous", "Direct", "Store & Forward", "Epidemic", "Spray & Wait"),
+            strategies.map { it.label }
+        )
+    }
+
+    @Test
     fun packetIntegrity_detectsTampering() {
         val original = MeshPacket(
             senderId = "node_a",
