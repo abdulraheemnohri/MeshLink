@@ -57,7 +57,7 @@ All adapters remain unverified on physical multi-device setups. See [NETWORKING_
 
 - Admin/member roles and admin-only role changes.
 - Per-recipient durable group-key update records and acknowledgements.
-- Per-recipient durable role-update outbox, recipient-bound ACK validation and reconnect retry.
+- Transactional local role change plus batch-persisted per-recipient role-update outbox, recipient-bound ACK validation and reconnect retry.
 - Idempotent duplicate role update handling for lost-ACK recovery.
 - Stale updates are superseded when a newer role or key epoch takes effect.
 - Legacy QR group invitations containing the raw shared group key remain disabled.
