@@ -8,6 +8,7 @@ import com.example.core.protocol.MeshPacket
 import com.example.core.protocol.MeshPacketCodec
 import com.example.core.protocol.TransportType
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -203,7 +204,7 @@ class LanMeshTransport(
     }
 
     private suspend fun runUdpDiscoveryListener() {
-        runCatching {
+        try {
             val sock = DatagramSocket(UDP_PORT).apply { broadcast = true }
             udpSocket = sock
             val buf = ByteArray(4096)
@@ -229,6 +230,18 @@ class LanMeshTransport(
                     rssiDbm = -52
                 )
                 _events.emit(TransportEvent.PeerFound(endpoint))
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (isRunning) {
+                _events.tryEmit(
+                    TransportEvent.Log(
+                        transportType = transportType,
+                        eventType = "UDP_DISCOVERY_ERR",
+                        message = "LAN UDP discovery listener stopped: ${error.javaClass.simpleName}"
+                    )
+                )
             }
         }
     }
