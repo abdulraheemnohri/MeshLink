@@ -453,3 +453,11 @@ CI and physical acceptance for these latest changes are pending. Real-device ver
 - Failure diagnostics are best-effort and do not block the rest of the queue if the diagnostics store is unavailable.
 - CI action references are aligned across both jobs: checkout v6, artifact upload/download v5, and Gradle wrapper validation v6. The Gradle setup action also performs wrapper validation.
 - Android CI success validates compilation and JVM tests only; radio and multi-device acceptance still require physical devices.
+
+
+## BLE callback permission-race hardening (2026-11-17)
+
+- BLE scan callbacks now resolve the remote Bluetooth address once inside a `SecurityException` guard. If Bluetooth Connect permission is revoked between scan delivery and address access, the callback safely ignores that result instead of crashing the callback thread.
+- The resolved address is reused for both the discovered-device index and endpoint, avoiding a second permission-sensitive framework access.
+- Empty advertised service identifiers are rejected as identity hints and fall back to the normalized Bluetooth address.
+- The Android CI run that exposed the missing `ContextCompat` import is superseded by the import fix; latest compilation and tests remain pending confirmation.
