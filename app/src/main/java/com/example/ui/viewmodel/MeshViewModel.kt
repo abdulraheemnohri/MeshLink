@@ -171,6 +171,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateProfileDraft(profile: LocalUserProfile) {
+        _profile.value = profile
+    }
+
     fun saveProfile(profile: LocalUserProfile) {
         viewModelScope.launch {
             runCatching { profileStore.save(profile) }
