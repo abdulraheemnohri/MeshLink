@@ -1240,6 +1240,9 @@ class MeshRoutingEngine(
                         )
                     )
                     flushStoreAndForwardQueue()
+                    if (peer.verifiedByQr && !peer.blocked) {
+                        retryPendingGroupRoleUpdatesForPeer(ep.deviceId)
+                    }
                 }
             }
 
@@ -1256,6 +1259,10 @@ class MeshRoutingEngine(
                         event.address
                     )
                     flushStoreAndForwardQueue()
+                    val peer = repository.getPeerById(event.peerId)
+                    if (peer?.verifiedByQr == true && !peer.blocked) {
+                        retryPendingGroupRoleUpdatesForPeer(event.peerId)
+                    }
                 } else {
                     endpointPaths[event.peerId]?.remove(event.transportType)
                     val remaining = selectPreferredEndpoint(event.peerId)
@@ -1504,6 +1511,7 @@ class MeshRoutingEngine(
                 repository.updateMessageStatus(ackId, "DELIVERED", System.currentTimeMillis(), packet.hopCount)
                 repository.removePendingPacket(ackId)
                 repository.markGroupKeyUpdateAcknowledged(ackId, packet.senderId)
+                repository.markGroupRoleUpdateAcknowledged(ackId, packet.senderId)
                 val ackAlias = senderPeer?.alias ?: packet.senderId
                 repository.recordEmergencyAck(baseEmergencyId, packet.senderId, ackAlias)
                 repository.logNetworkEvent(
