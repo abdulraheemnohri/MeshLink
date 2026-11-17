@@ -323,3 +323,15 @@ The app's release keystore must remain private and outside Git. A signed release
 - Added unit tests for the arbitration rule in both peer perspectives.
 - Existing 90-second handshake expiry and automatic private-text retry remain in place. Paused outgoing file transfers resume when the session-established event is emitted.
 - Remaining validation: two-device simultaneous reconnect/rekey, packet loss during rekey, session expiry while a file transfer is paused, process death during an offer, and old/new app version interoperability. The maintenance loop and radio behavior still require physical-device testing.
+
+
+## Transport and multi-hop acceptance preparation (2026-11-17)
+
+- Rewrote the networking matrix to match the current source adapters and clearly separate implemented source, Android platform requirements and physical acceptance status.
+- Added `docs/TRANSPORT_ACCEPTANCE_RESULTS.md` as a per-transport evidence tracker. LAN, hotspot, BLE, Bluetooth Classic, Wi-Fi Direct, Wi-Fi Aware, Nearby, NFC and QR physical results are explicitly NOT RUN; no device results have been fabricated.
+- Corrected protocol documentation that previously claimed Bluetooth Classic and Nearby were not registered transports.
+- Extracted multi-hop TTL and visited-path decisions into `MeshForwardingPolicy`; relay forwarding now rejects a node already in the visited path, consumes exactly one hop and avoids sending to the previous sender or a previously visited next hop.
+- Routing now rejects a destination already present in the packet's visited path and records loop-drop diagnostics.
+- Added JVM regression tests for hop decrement, visited-path loop rejection, destination stop and next-hop filtering.
+- Expanded the multi-device acceptance plan with simultaneous session negotiation, durable role ACK recovery, session process-death recovery and TTL/loop abuse scenarios.
+- Remaining validation: run Android CI and then execute the physical transport and A-B-C relay tests. The code-level policy tests do not prove RF interoperability or end-to-end relay behavior.
