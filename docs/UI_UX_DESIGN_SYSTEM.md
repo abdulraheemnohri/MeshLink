@@ -18,6 +18,8 @@ MeshLink uses a dark-first, technical interface: obsidian surfaces, restrained c
 - Existing controls, route names, callbacks, test tags and data models are preserved.
 - Private and group chat composers follow the Android keyboard inset, cap drafts at 4,000 characters, show a live character count and disable sending when the draft is blank or the conversation target is unavailable.
 - Chat timelines animate to the newest message when the message count changes; message bubbles use a subtle directional corner, outline and content-size transition.
+- Private and group conversations include local in-list search across message text, sender alias and delivery status, with an explicit clear action and an honest no-match state.
+- Each message exposes a copy-to-clipboard action; delivery labels use semantic colors for delivered, failed/expired, queued and relayed states while retaining the textual status.
 
 ## UX and accessibility guardrails
 - Motion is short and functional; avoid continuous animation for static/offline states.
