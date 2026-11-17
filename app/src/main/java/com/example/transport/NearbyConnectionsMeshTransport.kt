@@ -274,7 +274,7 @@ class NearbyConnectionsMeshTransport(
 
     companion object {
         private const val SERVICE_ID = "com.example.meshlink.connections"
-        private const val MAX_FRAME_BYTES = 1024 * 1024
+        private const val MAX_FRAME_BYTES = 32 * 1024
         private const val CONNECT_TIMEOUT_MS = 12_000L
         private const val HANDSHAKE_TTL_MS = 60_000L
     }
