@@ -103,3 +103,12 @@ Automated policy tests cover all five modes. Physical radio and multi-hop accept
 - Nearby Connections: run concurrent connect callers for one endpoint, force a timeout, and verify no waiter is overwritten or left retained; cancel a send and verify cancellation reaches the caller.
 - Wi-Fi Direct: cancel a socket send and verify cancellation is not converted into a normal false delivery result.
 - These are acceptance procedures, not claims that OEM radio behavior has already been tested.
+
+
+## Late callback and inbound-frame acceptance (2026-11-17)
+
+- Wi-Fi Aware: start then stop before attach callback delivery; verify the stale session closes and does not publish/subscribe. Repeat stop/start and ensure only the newest generation updates peer state.
+- Wi-Fi Aware: cancel a frame send and verify cancellation reaches the caller and the pending-send map is empty afterward.
+- BLE GATT: send an unknown characteristic, prepared write, non-zero offset, empty value, and over-limit value; verify each is rejected and no packet is delivered. Send a valid frame and verify normal reassembly.
+- Wi-Fi Direct: stop while peer/connection-info requests are in flight; verify late callbacks do not recreate group state or emit stale connected status.
+- These are required device/API regression scenarios, not evidence of completed physical-device testing.
