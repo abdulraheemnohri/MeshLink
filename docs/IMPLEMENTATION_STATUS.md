@@ -345,3 +345,11 @@ The app's release keystore must remain private and outside Git. A signed release
 - Added `docs/ANDROID_RELEASE.md` with required secrets, tag/version policy, signature verification and upgrade warnings.
 - The release workflow has not been exercised with production signing secrets or a real tag. No signed production APK is claimed.
 - Gradle Wrapper remains incomplete: only `gradle-wrapper.properties` exists; the official wrapper JAR and `gradlew` / `gradlew.bat` are absent. CI installs Gradle 9.3.1 directly. Add the official wrapper artifacts before claiming one-command local wrapper builds.
+
+
+## Legacy source cleanup (2026-11-17)
+
+- Removed the unreferenced `com.meshlink` `PeerRepository` and legacy `MeshConnectionService`. Repository code search found no consumers; the old service was not declared in the Android manifest. Active peer persistence remains in `com.example.data.repository.MeshRepository`, and active Wi-Fi Direct transport remains in `com.example.transport.WifiDirectTransport`.
+- Removed the unused `mesh-protocol` Gradle module after confirming the app did not depend on it. Its duplicate `MeshPacketModel` and proto schema were not generated, referenced or integrated with the active `com.example.core.protocol.MeshProtocol` implementation. Keeping two independent packet models risked protocol drift.
+- The active app now has one packet model and one active repository/routing implementation.
+- Remaining validation: Android CI after module removal; repository-wide reference scan and APK build.
