@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import com.example.core.crypto.MeshCryptoEngine
+import com.example.core.crypto.EphemeralSessionHandshake
 import com.example.core.protocol.MeshPacket
 import com.example.core.protocol.MeshPacketCodec
 import com.example.core.protocol.PacketType
@@ -53,6 +54,10 @@ class MeshRoutingEngine(
     // Keep every transport-specific locator for a peer; adapter addresses are not interchangeable.
     private val activeEndpoints = ConcurrentHashMap<String, DiscoveredEndpoint>()
     private val endpointPaths = ConcurrentHashMap<String, ConcurrentHashMap<TransportType, DiscoveredEndpoint>>()
+    private val ephemeralSessionProtocol = EphemeralSessionHandshake()
+    private val pendingEphemeralOffers = ConcurrentHashMap<String, EphemeralSessionHandshake.PendingOffer>()
+    private val ephemeralSessions = ConcurrentHashMap<String, EphemeralSessionHandshake.SessionKeys>()
+    private val ephemeralSessionExpiry = ConcurrentHashMap<String, Long>()
     private val packetReplayStore = PacketReplayStore(context)
     private val transports = mutableListOf<MeshTransport>()
     private val transportPolicy = com.example.transport.TransportPolicyManager(context)
@@ -106,11 +111,19 @@ class MeshRoutingEngine(
             put("emergency", isEmergency)
         }.toString()
 
-        val encrypted = if (peer.agreementPublicKey.isNotBlank()) {
-            crypto.encryptForPeer(payloadJson, peer.agreementPublicKey, peer.ratchetCounter)
-        } else {
+        if (!peer.verifiedByQr || peer.blocked || peer.signingPublicKey.isBlank()) return false
+        val session = getActiveEphemeralSession(peerId)
+        if (session == null) {
+            initiateEphemeralSession(peerId)
+            repository.logNetworkEvent(
+                transportType = "SECURITY",
+                eventType = "SESSION_REQUIRED",
+                peerId = peerId,
+                summary = "Private message held: negotiating an authenticated short-lived session; retry after the peer responds"
+            )
             return false
         }
+        val encrypted = "MLSE1:" + crypto.encryptWithSessionKey(payloadJson, session.sendKey)
 
         val strategy = resolveEffectiveStrategy(
             requested = strategyOverride ?: RoutingStrategy.valueOf(settings.defaultRoutingStrategy),
@@ -483,6 +496,144 @@ class MeshRoutingEngine(
     }
 
     suspend fun sendRawSignedPacket(packet: MeshPacket): Boolean = dispatchPacket(packet)
+
+    private fun getActiveEphemeralSession(peerId: String): EphemeralSessionHandshake.SessionKeys? {
+        val expiry = ephemeralSessionExpiry[peerId] ?: return null
+        if (System.currentTimeMillis() >= expiry) {
+            ephemeralSessionExpiry.remove(peerId)
+            ephemeralSessions.remove(peerId)?.let { keys ->
+                keys.sendKey.fill(0)
+                keys.receiveKey.fill(0)
+                keys.transcriptHash.fill(0)
+            }
+            return null
+        }
+        return ephemeralSessions[peerId]
+    }
+
+    private suspend fun initiateEphemeralSession(peerId: String): Boolean {
+        if (getActiveEphemeralSession(peerId) != null) return true
+        if (pendingEphemeralOffers.values.any { it.offer.responderId == peerId }) return false
+        val peer = repository.getPeerById(peerId) ?: return false
+        val endpoint = activeEndpoints[peerId] ?: return false
+        if (!peer.verifiedByQr || peer.blocked || peer.signingPublicKey.isBlank()) return false
+        val pending = runCatching { crypto.createEphemeralSessionOffer(peerId, ephemeralSessionProtocol) }.getOrNull() ?: return false
+        pendingEphemeralOffers[pending.offer.sessionId] = pending
+        val offer = pending.offer
+        val payload = JSONObject().apply {
+            put("version", offer.version)
+            put("sessionId", offer.sessionId)
+            put("initiatorId", offer.initiatorId)
+            put("responderId", offer.responderId)
+            put("ephemeralPublicKeyB64", offer.ephemeralPublicKeyB64)
+            put("nonceB64", offer.nonceB64)
+            put("signatureB64", offer.signatureB64)
+        }.toString()
+        val local = repository.ensureInitialized()
+        val packet = crypto.signPacket(
+            MeshPacket(
+                senderId = local.deviceId,
+                destinationId = peerId,
+                packetType = PacketType.SESSION_OFFER,
+                routingStrategy = RoutingStrategy.DIRECT,
+                hopLimit = 1,
+                expiresAt = System.currentTimeMillis() + SESSION_HANDSHAKE_TTL_MS,
+                encryptedPayload = payload,
+                visitedPeers = listOf(local.deviceId),
+                priority = MeshPacket.PRIORITY_HIGH
+            )
+        )
+        val sent = sendOverBestTransport(endpoint, packet)
+        if (!sent) pendingEphemeralOffers.remove(offer.sessionId)
+        return sent
+    }
+
+    private suspend fun handleEphemeralSessionPacket(packet: MeshPacket, senderSigningKey: String): Boolean {
+        return when (packet.packetType) {
+            PacketType.SESSION_OFFER -> {
+                val peer = repository.getPeerById(packet.senderId) ?: return false
+                if (!peer.verifiedByQr || peer.blocked || packet.destinationId != repository.ensureInitialized().deviceId) return false
+                val obj = runCatching { JSONObject(packet.encryptedPayload) }.getOrNull() ?: return false
+                val offer = runCatching {
+                    EphemeralSessionHandshake.Offer(
+                        version = obj.getInt("version"),
+                        sessionId = obj.getString("sessionId"),
+                        initiatorId = obj.getString("initiatorId"),
+                        responderId = obj.getString("responderId"),
+                        ephemeralPublicKeyB64 = obj.getString("ephemeralPublicKeyB64"),
+                        nonceB64 = obj.getString("nonceB64"),
+                        signatureB64 = obj.getString("signatureB64")
+                    )
+                }.getOrNull() ?: return false
+                if (offer.initiatorId != packet.senderId) return false
+                val accepted = runCatching {
+                    crypto.acceptEphemeralSessionOffer(offer, senderSigningKey, ephemeralSessionProtocol)
+                }.getOrNull() ?: return false
+                val local = repository.ensureInitialized()
+                val response = accepted.response
+                val responseJson = JSONObject().apply {
+                    put("version", response.version)
+                    put("sessionId", response.sessionId)
+                    put("initiatorId", response.initiatorId)
+                    put("responderId", response.responderId)
+                    put("ephemeralPublicKeyB64", response.ephemeralPublicKeyB64)
+                    put("nonceB64", response.nonceB64)
+                    put("signatureB64", response.signatureB64)
+                }.toString()
+                val responsePacket = crypto.signPacket(
+                    MeshPacket(
+                        senderId = local.deviceId,
+                        destinationId = packet.senderId,
+                        packetType = PacketType.SESSION_RESPONSE,
+                        routingStrategy = RoutingStrategy.DIRECT,
+                        hopLimit = 1,
+                        expiresAt = System.currentTimeMillis() + SESSION_HANDSHAKE_TTL_MS,
+                        encryptedPayload = responseJson,
+                        visitedPeers = listOf(local.deviceId),
+                        priority = MeshPacket.PRIORITY_HIGH
+                    )
+                )
+                val endpoint = activeEndpoints[packet.senderId] ?: return false
+                if (!sendOverBestTransport(endpoint, responsePacket)) return false
+                ephemeralSessions[packet.senderId] = accepted.sessionKeys
+                ephemeralSessionExpiry[packet.senderId] = System.currentTimeMillis() + EPHEMERAL_SESSION_LIFETIME_MS
+                repository.logSecurityEvent(
+                    eventType = "EPHEMERAL_SESSION_ESTABLISHED",
+                    peerId = packet.senderId,
+                    summary = "Authenticated ephemeral session established for private text traffic"
+                )
+                true
+            }
+            PacketType.SESSION_RESPONSE -> {
+                val obj = runCatching { JSONObject(packet.encryptedPayload) }.getOrNull() ?: return false
+                val response = runCatching {
+                    EphemeralSessionHandshake.Response(
+                        version = obj.getInt("version"),
+                        sessionId = obj.getString("sessionId"),
+                        initiatorId = obj.getString("initiatorId"),
+                        responderId = obj.getString("responderId"),
+                        ephemeralPublicKeyB64 = obj.getString("ephemeralPublicKeyB64"),
+                        nonceB64 = obj.getString("nonceB64"),
+                        signatureB64 = obj.getString("signatureB64")
+                    )
+                }.getOrNull() ?: return false
+                if (response.responderId != packet.senderId) return false
+                val pending = pendingEphemeralOffers.remove(response.sessionId) ?: return false
+                val keys = runCatching {
+                    crypto.finishEphemeralSessionOffer(pending, response, senderSigningKey, ephemeralSessionProtocol)
+                }.getOrNull() ?: return false
+                ephemeralSessions[packet.senderId] = keys
+                ephemeralSessionExpiry[packet.senderId] = System.currentTimeMillis() + EPHEMERAL_SESSION_LIFETIME_MS
+                repository.logSecurityEvent(
+                    eventType = "EPHEMERAL_SESSION_ESTABLISHED",
+                    peerId = packet.senderId,
+                    summary = "Authenticated ephemeral session established for private text traffic"
+                )
+                true
+            }
+            else -> false
+        }
+    }
 
     suspend fun sendHandshake(endpoint: DiscoveredEndpoint): Boolean {
         val local = repository.ensureInitialized()
@@ -891,6 +1042,12 @@ class MeshRoutingEngine(
             return
         }
 
+        if (packet.packetType == PacketType.SESSION_OFFER || packet.packetType == PacketType.SESSION_RESPONSE) {
+            if (packet.destinationId != local.deviceId) return
+            handleEphemeralSessionPacket(packet, senderPeer.signingPublicKey)
+            return
+        }
+
         val isForLocal = packet.destinationId == local.deviceId ||
             packet.destinationId == MeshPacket.BROADCAST_ID
 
@@ -994,6 +1151,9 @@ class MeshRoutingEngine(
             PacketType.MESSAGE, PacketType.EMERGENCY_BEACON -> {
                 val plain = if (packet.destinationId == MeshPacket.BROADCAST_ID) {
                     packet.encryptedPayload
+                } else if (packet.encryptedPayload.startsWith("MLSE1:")) {
+                    val session = getActiveEphemeralSession(packet.senderId) ?: return
+                    crypto.decryptWithSessionKey(packet.encryptedPayload.removePrefix("MLSE1:"), session.receiveKey)
                 } else if (senderPeer?.agreementPublicKey?.isNotBlank() == true) {
                     crypto.decryptFromPeer(packet.encryptedPayload, senderPeer.agreementPublicKey, senderPeer.ratchetCounter)
                 } else {
@@ -1324,5 +1484,7 @@ class MeshRoutingEngine(
 
     companion object {
         private const val MAX_SEEN_PACKETS = 10_000
+        private const val SESSION_HANDSHAKE_TTL_MS = 90_000L
+        private const val EPHEMERAL_SESSION_LIFETIME_MS = 15 * 60_000L
     }
 }
