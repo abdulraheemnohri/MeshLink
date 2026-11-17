@@ -42,6 +42,6 @@ Never commit a keystore, signing password, private key, or base64 keystore value
 - Do not publish a release until the certificate fingerprint matches the intended existing production signing identity.
 - The GitHub release workflow is configured but has not yet been exercised with production signing secrets or a real version tag.
 
-## Gradle Wrapper status
+## Gradle Wrapper
 
-The repository contains `gradle/wrapper/gradle-wrapper.properties`, but it does not currently contain the wrapper JAR or `gradlew` / `gradlew.bat` launch scripts. CI installs Gradle 9.3.1 directly and therefore does not depend on a wrapper. Do not run `./gradlew` until the official Gradle 9.3.1 wrapper JAR and scripts are added and verified.
+The repository now includes the official Gradle 9.3.1 wrapper JAR, `gradlew`, `gradlew.bat` and wrapper properties. Use `./gradlew` on Linux/macOS or `gradlew.bat` on Windows. Android CI regenerates/verifies the wrapper and uses it for compilation and unit tests.
