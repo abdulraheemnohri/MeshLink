@@ -374,6 +374,73 @@ class MeshRoutingEngine(
         )
         return queuedOrSent to recipients.size
     }
+    suspend fun retryPendingGroupKeyUpdates(groupId: String): Pair<Int, Int> {
+        val local = repository.ensureInitialized()
+        if (!repository.isGroupAdmin(groupId, local.deviceId)) {
+            throw IllegalStateException("Only a group admin can retry key distribution")
+        }
+        val group = repository.getGroupById(groupId)
+            ?: throw IllegalArgumentException("Group not found")
+        val members = repository.getGroupMembersOnce(groupId).associateBy { it.peerId }
+        val unresolved = repository.getUnresolvedGroupKeyUpdates(groupId)
+        var retried = 0
+        var waiting = 0
+
+        unresolved.forEach { oldRecord ->
+            if (oldRecord.epoch != group.keyEpoch || !members.containsKey(oldRecord.peerId)) {
+                repository.markGroupKeyUpdateSuperseded(oldRecord.packetId)
+                return@forEach
+            }
+            val peer = repository.getPeerById(oldRecord.peerId)
+            if (peer == null || !peer.verifiedByQr || peer.blocked || peer.agreementPublicKey.isBlank()) {
+                waiting++
+                return@forEach
+            }
+
+            val payload = JSONObject().apply {
+                put("groupId", group.groupId)
+                put("epoch", group.keyEpoch)
+                put("key", group.groupSymmetricKeyB64)
+                put("revokedPeerId", oldRecord.revokedPeerId ?: "")
+            }.toString()
+            val packet = crypto.signPacket(
+                MeshPacket(
+                    senderId = local.deviceId,
+                    destinationId = oldRecord.peerId,
+                    packetType = PacketType.GROUP_KEY_UPDATE,
+                    routingStrategy = RoutingStrategy.STORE_AND_FORWARD,
+                    encryptedPayload = crypto.encryptForPeer(payload, peer.agreementPublicKey, peer.ratchetCounter),
+                    visitedPeers = listOf(local.deviceId),
+                    priority = MeshPacket.PRIORITY_HIGH
+                )
+            )
+            repository.recordGroupKeyUpdate(
+                group.groupId, group.keyEpoch, oldRecord.peerId, packet.messageId, "PENDING",
+                oldRecord.revokedPeerId
+            )
+            repository.markGroupKeyUpdateSuperseded(oldRecord.packetId)
+            val deliveredNow = dispatchPacket(packet)
+            val queued = repository.getPendingPacketById(packet.messageId) != null
+            repository.recordGroupKeyUpdate(
+                group.groupId, group.keyEpoch, oldRecord.peerId, packet.messageId,
+                when {
+                    deliveredNow -> "SENT"
+                    queued -> "QUEUED"
+                    else -> "FAILED"
+                },
+                oldRecord.revokedPeerId
+            )
+            if (deliveredNow || queued) retried++ else waiting++
+        }
+
+        repository.logSecurityEvent(
+            eventType = "GROUP_KEY_UPDATE_RECOVERY",
+            severity = if (waiting == 0) "INFO" else "WARN",
+            summary = "Group epoch ${group.keyEpoch}: retried $retried unresolved key update(s); $waiting recipient(s) still need connectivity or verification"
+        )
+        return retried to waiting
+    }
+
     suspend fun sendGroupInvite(groupId: String, peerId: String): Boolean {
         val local = repository.ensureInitialized()
         val group = repository.getGroupById(groupId) ?: return false
