@@ -387,6 +387,13 @@ class MeshRoutingEngine(
         var retried = 0
         var waiting = 0
         unresolved.forEach { oldRecord ->
+            val retryNow = System.currentTimeMillis()
+            if (oldRecord.status in setOf("PENDING", "QUEUED", "SENT") &&
+                retryNow - oldRecord.updatedAt < GROUP_ROLE_UPDATE_RETRY_INTERVAL_MS
+            ) {
+                waiting++
+                return@forEach
+            }
             val group = repository.getGroupById(oldRecord.groupId)
             if (group == null || group.keyEpoch != oldRecord.epoch ||
                 !repository.isGroupAdmin(oldRecord.groupId, local.deviceId)
@@ -1947,5 +1954,6 @@ class MeshRoutingEngine(
         private const val SESSION_HANDSHAKE_TTL_MS = 90_000L
         private const val EPHEMERAL_SESSION_LIFETIME_MS = 15 * 60_000L
         private const val SESSION_REKEY_LEAD_TIME_MS = 60_000L
+        private const val GROUP_ROLE_UPDATE_RETRY_INTERVAL_MS = 30_000L
     }
 }
