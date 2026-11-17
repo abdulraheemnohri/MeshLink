@@ -254,7 +254,8 @@ class MeshRoutingEngine(
         }
         val effectiveStrategy = resolveEffectiveStrategy(
             requested = requestedStrategy,
-            hasDirectEndpoint = reachableGroupMemberCount > 0
+            hasDirectEndpoint = reachableGroupMemberCount > 0,
+            activePeerCount = reachableGroupMemberCount
         )
 
         val payloadJson = JSONObject().apply {
@@ -1135,26 +1136,38 @@ class MeshRoutingEngine(
             }
         }
 
-        if (packet.packetType == PacketType.GROUP_MESSAGE &&
-            packet.routingStrategy == RoutingStrategy.DIRECT
-        ) {
+        if (packet.packetType == PacketType.GROUP_MESSAGE) {
             val reachable = groupMemberIds.mapNotNull { activeEndpoints[it] }
-            var deliveredToPeers = 0
-            reachable.forEach { endpoint ->
-                if (MeshForwardingPolicy.canForwardToNextHop(packet, endpoint.deviceId) &&
-                    sendOverBestTransport(endpoint, packet)
-                ) deliveredToPeers++
+                .filter { MeshForwardingPolicy.canForwardToNextHop(packet, it.deviceId) }
+            if (packet.routingStrategy == RoutingStrategy.DIRECT) {
+                var deliveredToPeers = 0
+                reachable.forEach { endpoint ->
+                    if (sendOverBestTransport(endpoint, packet)) deliveredToPeers++
+                }
+                if (deliveredToPeers > 0) {
+                    repository.updateMessageStatus(packet.messageId, "RELAYED", null, packet.hopCount)
+                    repository.logNetworkEvent(
+                        transportType = "MULTI",
+                        eventType = "GROUP_DIRECT",
+                        peerId = packet.destinationId,
+                        summary = "Sent group message directly to $deliveredToPeers currently reachable member(s); no relay or offline queue"
+                    )
+                }
+                return deliveredToPeers > 0
             }
-            if (deliveredToPeers > 0) {
-                repository.updateMessageStatus(packet.messageId, "RELAYED", null, packet.hopCount)
-                repository.logNetworkEvent(
-                    transportType = "MULTI",
-                    eventType = "GROUP_DIRECT",
-                    peerId = packet.destinationId,
-                    summary = "Sent group message directly to $deliveredToPeers currently reachable member(s); no relay or offline queue"
-                )
+            if (packet.routingStrategy == RoutingStrategy.STORE_AND_FORWARD) {
+                val nextMember = reachable.firstOrNull()
+                if (nextMember != null && sendOverBestTransport(nextMember, packet)) {
+                    repository.updateMessageStatus(packet.messageId, "RELAYED", null, packet.hopCount)
+                    repository.logNetworkEvent(
+                        transportType = nextMember.transportType.name,
+                        eventType = "GROUP_DTN_HOP",
+                        peerId = nextMember.deviceId,
+                        summary = "Forwarded group Store & Forward packet to one reachable member for later relay"
+                    )
+                    return true
+                }
             }
-            return deliveredToPeers > 0
         }
 
         val directEndpoint = if (packet.packetType == PacketType.GROUP_MESSAGE) null else activeEndpoints[packet.destinationId]?.takeIf {
@@ -1991,13 +2004,14 @@ class MeshRoutingEngine(
 
     private fun resolveEffectiveStrategy(
         requested: RoutingStrategy,
-        hasDirectEndpoint: Boolean
+        hasDirectEndpoint: Boolean,
+        activePeerCount: Int = activeEndpoints.size
     ): RoutingStrategy {
         if (requested != RoutingStrategy.AUTONOMOUS) return requested
         return RoutingStrategyPolicy.resolveAutonomous(
             hasDirectEndpoint = hasDirectEndpoint,
             batteryPercent = getBatteryPercentage(),
-            activePeerCount = activeEndpoints.size
+            activePeerCount = activePeerCount
         )
     }
 
