@@ -19,9 +19,10 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Versioned, identity-authenticated ephemeral ECDH handshake primitives.
  *
- * Not wired into MeshRoutingEngine yet. Existing queued packets are encrypted before a peer is
- * online, so routing integration requires negotiated-session queue/retry semantics and version
- * negotiation. Do not treat this class as an active transport security upgrade.
+ * MeshRoutingEngine uses this protocol for directly connected, QR-verified private-text peers.
+ * The negotiated keys are currently process-local and do not protect file transfer, group,
+ * voice, location, or legacy queued traffic. This is a scoped session upgrade, not app-wide
+ * forward secrecy.
  */
 class EphemeralSessionHandshake(private val random: SecureRandom = SecureRandom()) {
     data class Offer(
