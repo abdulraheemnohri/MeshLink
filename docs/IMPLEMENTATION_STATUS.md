@@ -245,3 +245,12 @@ The app's release keystore must remain private and outside Git. A signed release
 - A mismatching replay is rejected and recorded as a security event; verified destination content is never overwritten by a late duplicate chunk.
 - Added JVM unit tests for exact chunk matching, wrong bytes, out-of-range reads, missing files and negative offsets.
 - This closes the lost-ACK retry case at the receiver state machine. End-to-end retry behavior, process-restart recovery and multi-device behavior still require Android CI and physical-device tests.
+
+## Verified received-file export (2026-11-17)
+
+- Added a transfer-manager export operation for inbound transfers in VERIFIED state only.
+- Before copying, the operation rechecks the source file size and SHA-256 digest; a mismatch is blocked and recorded as a security event.
+- Exports use Android MediaStore Downloads under `Downloads/MeshLink`, with `IS_PENDING` publication so partially copied files are not exposed.
+- The transfer dashboard exposes the save action only for verified incoming files. No broad storage permission is requested.
+- This implementation currently requires Android 10 (API 29) or newer. Older Android versions return an unsupported result; a Storage Access Framework fallback remains future work.
+- The export action is not a file opener or share action; those remain separate follow-up work.
