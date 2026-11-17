@@ -36,7 +36,7 @@ Review every route on a compact phone and a wide screen, with both light and dar
 
 - Queue overview summarizes active, verified, and attention-required transfers from persisted transfer records.
 - Search matches file name, peer alias, transport, and current status; filters separate active, attention-required, and verified items.
-- Progress presents acknowledged chunk count, a byte estimate derived from chunk completion, and a percentage. It is checkpoint progress, not a throughput or ETA claim.
+- Progress presents acknowledged chunk count, an explicitly approximate byte estimate derived from chunk completion, and a percentage. It is checkpoint progress, not a throughput or ETA claim. Filter chips scroll horizontally on narrow screens.
 - Pause/resume controls are shown only for outgoing transfers, matching the manager's supported operations. Failed incoming files explain that the sender must resend them.
 - Verified state is explicitly labeled as receiver-side SHA-256 verification; unverified records continue to show a shortened digest for reference.
 - Empty and no-match states guide users back to file selection or filter adjustment.
