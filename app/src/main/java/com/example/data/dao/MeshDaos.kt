@@ -109,6 +109,9 @@ interface GroupDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertRoleUpdate(update: GroupRoleUpdateEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertRoleUpdates(updates: List<GroupRoleUpdateEntity>)
+
     @Query("SELECT * FROM group_role_updates WHERE packetId = :packetId LIMIT 1")
     suspend fun getRoleUpdateByPacketId(packetId: String): GroupRoleUpdateEntity?
 
