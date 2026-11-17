@@ -178,6 +178,7 @@ data class SettingsEntity(
     val backgroundRelayEnabled: Boolean = true,
     val bleEnabled: Boolean = true,
     val bluetoothClassicEnabled: Boolean = false,
+    val nearbyConnectionsEnabled: Boolean = false,
     val wifiDirectEnabled: Boolean = true,
     val wifiAwareEnabled: Boolean = true,
     val localLanEnabled: Boolean = true,
