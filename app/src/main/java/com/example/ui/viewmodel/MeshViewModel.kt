@@ -288,8 +288,22 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 _snackMessages.tryEmit("That is your own local node identity")
                 return@launch
             }
-            repository.importVerifiedPeer(payload)
-            _snackMessages.tryEmit("Verified & trusted ${payload.alias}")
+            runCatching { repository.importVerifiedPeer(payload) }
+                .onSuccess { peer ->
+                    _snackMessages.tryEmit(
+                        if (peer.verifiedByQr) "Identity matched the previously trusted fingerprint for ${peer.alias}"
+                        else "Imported ${peer.alias}. Compare its fingerprint out-of-band before trusting it."
+                    )
+                }
+                .onFailure { error ->
+                    _snackMessages.tryEmit(
+                        if (error is com.example.data.repository.PeerIdentityKeyChangedException) {
+                            "SECURITY ALERT: identity key changed for ${payload.alias}. Existing trust was preserved; verify the new fingerprint separately."
+                        } else {
+                            "Could not import peer identity: ${error.message ?: "storage error"}"
+                        }
+                    )
+                }
         }
     }
 
