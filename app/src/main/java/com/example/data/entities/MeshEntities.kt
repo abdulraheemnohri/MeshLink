@@ -76,6 +76,20 @@ data class GroupKeyUpdateEntity(
     val revokedPeerId: String? = null
 )
 
+@Entity(tableName = "group_role_updates", indices = [androidx.room.Index(value = ["groupId"]), androidx.room.Index(value = ["peerId"])])
+data class GroupRoleUpdateEntity(
+    @androidx.room.PrimaryKey val packetId: String,
+    val groupId: String,
+    val epoch: Int,
+    val peerId: String,
+    val targetPeerId: String,
+    val role: String,
+    val issuedAt: Long,
+    val status: String = "PENDING",
+    val updatedAt: Long = System.currentTimeMillis(),
+    val acknowledgedAt: Long? = null
+)
+
 @Entity(tableName = "emergency_broadcasts")
 data class EmergencyBroadcastEntity(
     @PrimaryKey val messageId: String,
