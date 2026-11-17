@@ -22,13 +22,14 @@ MeshLink is an Android-first, offline-first peer-to-peer communication project. 
 
 - Nearby peer discovery and pairing.
 - Direct messaging and durable pending-message queues.
-- Bluetooth LE, Wi-Fi Direct, Wi-Fi Aware and local-LAN transport adapters where supported.
+- Bluetooth LE, Bluetooth Classic RFCOMM, Google Nearby Connections (Google Play services required), Wi-Fi Direct, Wi-Fi Aware and local-LAN transport adapters where supported.
 - Bounded packet framing and chunked file transfer.
 - Store-and-forward and hop-limited routing.
 - Peer identity verification and encrypted local storage.
 - Same-network WLAN/LAN and compatible hotspot networking.
 - Automatic best-available transport fallback across registered adapters.
 - NFC / QR identity bootstrap (not general-purpose continuous data links).
+- A per-feature Android Permission Manager for camera, Bluetooth/Nearby Devices, Nearby Wi-Fi, location, microphone and notifications.
 - Diagnostics and transport capability reporting.
 
 The implementation status of each capability must be verified using the acceptance criteria in `docs/IMPLEMENTATION_STATUS.md`.
@@ -42,7 +43,7 @@ MeshLink does not provide unlimited range. Multi-hop communication requires othe
 ## Technology
 
 - Kotlin and Jetpack Compose
-- Android Bluetooth and Wi-Fi P2P/Aware APIs
+- Android Bluetooth, Wi-Fi P2P/Aware and optional Google Nearby Connections APIs
 - Kotlin Coroutines and Flow
 - Room / SQLite
 - Gradle
