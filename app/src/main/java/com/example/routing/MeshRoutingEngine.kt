@@ -1086,7 +1086,7 @@ class MeshRoutingEngine(
 
     suspend fun dispatchPacket(packet: MeshPacket): Boolean {
         val now = System.currentTimeMillis()
-        if (packet.isExpired(now) || packet.hopLimit < 0) return false
+        if (packet.isExpired(now) || !MeshForwardingPolicy.hasValidRouteMetadata(packet)) return false
         packetReplayStore.rememberIfNew(packet.messageId, packet.expiresAt, now)
         val localIdentity = repository.ensureInitialized()
         if (packet.destinationId != MeshPacket.BROADCAST_ID &&
@@ -1362,6 +1362,15 @@ class MeshRoutingEngine(
         // Replay & duplicate suppression. Expired entries are pruned and the cache is bounded.
         val now = System.currentTimeMillis()
         if (packet.isExpired(now)) return
+        if (!MeshForwardingPolicy.hasValidRouteMetadata(packet)) {
+            repository.logSecurityEvent(
+                eventType = "ROUTE_METADATA_REJECTED",
+                peerId = packet.senderId,
+                severity = "WARN",
+                summary = "Dropped packet with invalid hop counters or duplicate/oversized visited path"
+            )
+            return
+        }
         if (local.deviceId in packet.visitedPeers) {
             repository.logSecurityEvent(
                 eventType = "ROUTE_LOOP_DROP",
