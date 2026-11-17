@@ -81,6 +81,41 @@ class AppDatabaseTest {
     }
 
     @Test
+    fun groupKeyRecovery_tracksRevocationAndSupersedesOldEpochs() = runBlocking {
+        val dao = db.groupDao()
+        dao.upsertKeyUpdate(
+            GroupKeyUpdateEntity(
+                packetId = "failed_epoch_4",
+                groupId = "group_recovery",
+                epoch = 4,
+                peerId = "member_1",
+                status = "FAILED",
+                revokedPeerId = "removed_member"
+            )
+        )
+        assertEquals(1, dao.countUnacknowledgedKeyUpdates("group_recovery"))
+        assertEquals("removed_member", dao.getKeyUpdateByPacketId("failed_epoch_4")?.revokedPeerId)
+        assertEquals(1, dao.getUnresolvedKeyUpdates("group_recovery").size)
+
+        dao.supersedeOlderKeyUpdates("group_recovery", 5, 500L)
+        assertEquals(0, dao.countUnacknowledgedKeyUpdates("group_recovery"))
+        assertEquals("SUPERSEDED", dao.getKeyUpdateByPacketId("failed_epoch_4")?.status)
+
+        dao.upsertKeyUpdate(
+            GroupKeyUpdateEntity(
+                packetId = "retry_epoch_5",
+                groupId = "group_recovery",
+                epoch = 5,
+                peerId = "member_1",
+                status = "QUEUED",
+                revokedPeerId = "removed_member"
+            )
+        )
+        assertEquals(1, dao.countUnacknowledgedKeyUpdates("group_recovery"))
+        assertEquals("removed_member", dao.getUnresolvedKeyUpdates("group_recovery").single().revokedPeerId)
+    }
+
+    @Test
     fun deviceIdentityDao_persistsAndUpdatesLocalNode() = runBlocking {
         val dao = db.deviceIdentityDao()
         assertNull(dao.getIdentityOnce())
