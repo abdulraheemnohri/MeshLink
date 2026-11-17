@@ -1,6 +1,7 @@
 package com.example.transport
 
 import com.example.core.protocol.TransportType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -70,7 +71,7 @@ class UniversalDiscoveryCoordinator(
     suspend fun start(types: Set<TransportType>): Map<TransportType, Result<Unit>> {
         val results = linkedMapOf<TransportType, Result<Unit>>()
         adapters.filter { it.transportType in types }.forEach { adapter ->
-            val result = runCatching { adapter.start() }
+            val result = captureAdapterResult { adapter.start() }
             results[adapter.transportType] = result
             val previous = health[adapter.transportType] ?: TransportHealthSnapshot(adapter.transportType, false)
             health[adapter.transportType] = previous.copy(
@@ -87,13 +88,13 @@ class UniversalDiscoveryCoordinator(
     suspend fun connect(endpoint: DiscoveredEndpoint): Result<Boolean> {
         val adapter = adapters.firstOrNull { it.transportType == endpoint.transportType }
             ?: return Result.failure(IllegalArgumentException("No adapter for " + endpoint.transportType))
-        return runCatching { adapter.connect(endpoint) }
+        return captureAdapterResult { adapter.connect(endpoint) }
     }
 
     suspend fun discoverAll(): Map<TransportType, Result<Unit>> {
         val results = linkedMapOf<TransportType, Result<Unit>>()
         adapters.filter { it.isRunning }.forEach { adapter ->
-            val result = runCatching { adapter.triggerDiscovery() }
+            val result = captureAdapterResult { adapter.triggerDiscovery() }
             results[adapter.transportType] = result
             val previous = health[adapter.transportType] ?: TransportHealthSnapshot(adapter.transportType, adapter.isRunning)
             health[adapter.transportType] = previous.copy(
@@ -112,7 +113,7 @@ class UniversalDiscoveryCoordinator(
     suspend fun stop(types: Set<TransportType>): Map<TransportType, Result<Unit>> {
         val results = linkedMapOf<TransportType, Result<Unit>>()
         adapters.filter { it.transportType in types }.forEach { adapter ->
-            val result = runCatching { adapter.stop() }
+            val result = captureAdapterResult { adapter.stop() }
             results[adapter.transportType] = result
             val previous = health[adapter.transportType] ?: TransportHealthSnapshot(adapter.transportType, adapter.isRunning)
             health[adapter.transportType] = previous.copy(
@@ -163,6 +164,19 @@ class UniversalDiscoveryCoordinator(
         }
         publish()
     }
+
+    /**
+     * Isolate ordinary adapter failures without swallowing structured cancellation.
+     * Service shutdown and caller cancellation must stop this coordinator operation.
+     */
+    private suspend fun <T> captureAdapterResult(block: suspend () -> T): Result<T> =
+        try {
+            Result.success(block())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            Result.failure(failure)
+        }
 
     private fun publishHealth() {
         _transportHealth.value = adapters.map { adapter ->
