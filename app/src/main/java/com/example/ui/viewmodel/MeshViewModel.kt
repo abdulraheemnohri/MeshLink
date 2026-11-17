@@ -584,6 +584,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     if (updated.localLanEnabled) add(com.example.core.protocol.TransportType.LOCAL_LAN)
                     if (updated.bleEnabled) add(com.example.core.protocol.TransportType.BLE)
                     if (updated.bluetoothClassicEnabled) add(com.example.core.protocol.TransportType.BLUETOOTH_CLASSIC)
+                    if (updated.nearbyConnectionsEnabled) add(com.example.core.protocol.TransportType.NEARBY_CONNECTIONS)
                     if (updated.wifiDirectEnabled) add(com.example.core.protocol.TransportType.WIFI_DIRECT)
                     if (updated.wifiAwareEnabled) add(com.example.core.protocol.TransportType.WIFI_AWARE)
                 }
