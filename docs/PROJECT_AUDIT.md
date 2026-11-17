@@ -41,6 +41,20 @@ The Identity screen previously displayed QR codes and accepted pasted identity U
 - Device integrations: NFC intent bootstrap, QR identity exchange, microphone, location, biometrics and runtime permissions
 - Build: Gradle version catalog and GitHub Actions Android CI
 
+## Local user profile
+
+The app now has a local-only profile editor available from the Node navigation tabs.
+
+- Display name (48-character limit), about text (160-character limit), status and avatar emoji.
+- Local privacy preferences for display-name sharing, contact requests and online-status visibility.
+- Profile values are stored in app-private SharedPreferences and survive app restarts.
+- The profile is intentionally separate from the cryptographic device identity and does not alter public keys, peer IDs or existing trust records.
+- The current profile is not automatically broadcast to peers. The online-status option is a saved preference only; presence broadcasting is not implemented.
+- No cloud account, registration, remote sync or profile-photo upload is required.
+- Robolectric tests cover persistence, trimming and field bounds.
+
+Profile data is descriptive, not a secret store. Do not put passwords, recovery phrases or private keys in profile fields. A future peer-profile exchange must define consent, signature binding, versioning and anti-spoofing before publishing profile details.
+
 ## QR scanner changes in this audit
 
 - Added CameraX camera2/core/lifecycle/view runtime dependencies.
