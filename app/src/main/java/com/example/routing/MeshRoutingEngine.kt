@@ -707,15 +707,7 @@ class MeshRoutingEngine(
         pendingEphemeralOffers[pending.offer.sessionId] = pending
         pendingEphemeralOfferExpiry[pending.offer.sessionId] = now + SESSION_HANDSHAKE_TTL_MS
         val offer = pending.offer
-        val payload = JSONObject().apply {
-            put("version", offer.version)
-            put("sessionId", offer.sessionId)
-            put("initiatorId", offer.initiatorId)
-            put("responderId", offer.responderId)
-            put("ephemeralPublicKeyB64", offer.ephemeralPublicKeyB64)
-            put("nonceB64", offer.nonceB64)
-            put("signatureB64", offer.signatureB64)
-        }.toString()
+        val payload = EphemeralSessionPacketCodec.encodeOffer(offer)
         val local = repository.ensureInitialized()
         val packet = crypto.signPacket(
             MeshPacket(
@@ -743,18 +735,7 @@ class MeshRoutingEngine(
             PacketType.SESSION_OFFER -> {
                 val peer = repository.getPeerById(packet.senderId) ?: return false
                 if (!peer.verifiedByQr || peer.blocked || packet.destinationId != repository.ensureInitialized().deviceId) return false
-                val obj = runCatching { JSONObject(packet.encryptedPayload) }.getOrNull() ?: return false
-                val offer = runCatching {
-                    EphemeralSessionHandshake.Offer(
-                        version = obj.getInt("version"),
-                        sessionId = obj.getString("sessionId"),
-                        initiatorId = obj.getString("initiatorId"),
-                        responderId = obj.getString("responderId"),
-                        ephemeralPublicKeyB64 = obj.getString("ephemeralPublicKeyB64"),
-                        nonceB64 = obj.getString("nonceB64"),
-                        signatureB64 = obj.getString("signatureB64")
-                    )
-                }.getOrNull() ?: return false
+                val offer = EphemeralSessionPacketCodec.decodeOffer(packet.encryptedPayload) ?: return false
                 if (offer.initiatorId != packet.senderId) return false
                 if (!packetReplayStore.rememberIfNew("session:${offer.sessionId}", packet.expiresAt, System.currentTimeMillis())) {
                     repository.logSecurityEvent(
@@ -770,15 +751,7 @@ class MeshRoutingEngine(
                 }.getOrNull() ?: return false
                 val local = repository.ensureInitialized()
                 val response = accepted.response
-                val responseJson = JSONObject().apply {
-                    put("version", response.version)
-                    put("sessionId", response.sessionId)
-                    put("initiatorId", response.initiatorId)
-                    put("responderId", response.responderId)
-                    put("ephemeralPublicKeyB64", response.ephemeralPublicKeyB64)
-                    put("nonceB64", response.nonceB64)
-                    put("signatureB64", response.signatureB64)
-                }.toString()
+                val responseJson = EphemeralSessionPacketCodec.encodeResponse(response)
                 val responsePacket = crypto.signPacket(
                     MeshPacket(
                         senderId = local.deviceId,
@@ -805,18 +778,7 @@ class MeshRoutingEngine(
                 true
             }
             PacketType.SESSION_RESPONSE -> {
-                val obj = runCatching { JSONObject(packet.encryptedPayload) }.getOrNull() ?: return false
-                val response = runCatching {
-                    EphemeralSessionHandshake.Response(
-                        version = obj.getInt("version"),
-                        sessionId = obj.getString("sessionId"),
-                        initiatorId = obj.getString("initiatorId"),
-                        responderId = obj.getString("responderId"),
-                        ephemeralPublicKeyB64 = obj.getString("ephemeralPublicKeyB64"),
-                        nonceB64 = obj.getString("nonceB64"),
-                        signatureB64 = obj.getString("signatureB64")
-                    )
-                }.getOrNull() ?: return false
+                val response = EphemeralSessionPacketCodec.decodeResponse(packet.encryptedPayload) ?: return false
                 if (response.responderId != packet.senderId) return false
                 val pending = pendingEphemeralOffers[response.sessionId] ?: return false
                 // Do not consume a valid pending handshake until the responder signature and
