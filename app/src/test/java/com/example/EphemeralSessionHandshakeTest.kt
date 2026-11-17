@@ -1,6 +1,7 @@
 package com.example
 
 import com.example.core.crypto.EphemeralSessionHandshake
+import com.example.core.crypto.shouldAcceptIncomingSessionOffer
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -13,6 +14,21 @@ class EphemeralSessionHandshakeTest {
     private fun identity() = KeyPairGenerator.getInstance("EC").apply {
         initialize(ECGenParameterSpec("secp256r1"))
     }.generateKeyPair()
+
+    @Test fun simultaneousOffersChooseTheSameSessionOnBothPeers() {
+        val offerA = "0000-a-session"
+        val offerB = "ffff-b-session"
+        assertFalse(shouldAcceptIncomingSessionOffer(offerA, offerB))
+        assertTrue(shouldAcceptIncomingSessionOffer(offerB, offerA))
+    }
+
+    @Test fun simultaneousOfferTieBreakIsIndependentOfPeerOrder() {
+        val first = "a-session"
+        val second = "b-session"
+        val acceptedByFirstPeer = shouldAcceptIncomingSessionOffer(first, second)
+        val acceptedBySecondPeer = shouldAcceptIncomingSessionOffer(second, first)
+        assertNotEquals(acceptedByFirstPeer, acceptedBySecondPeer)
+    }
 
     @Test fun bothSidesDeriveMatchingOppositeDirectionalKeys() {
         val alice = identity()
