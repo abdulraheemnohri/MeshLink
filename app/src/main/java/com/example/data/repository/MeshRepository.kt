@@ -345,7 +345,7 @@ class MeshRepository(
         )
         logSecurityEvent(
             eventType = "GROUP_KEY_GEN",
-            summary = "Created $category group '${group.name}' with ${memberPeers.size + 1} members"
+            summary = "Created $category group '${group.name}' with ${memberPeers.size} invitation targets"
         )
         return group
     }
