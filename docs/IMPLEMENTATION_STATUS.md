@@ -461,3 +461,11 @@ CI and physical acceptance for these latest changes are pending. Real-device ver
 - The resolved address is reused for both the discovered-device index and endpoint, avoiding a second permission-sensitive framework access.
 - Empty advertised service identifiers are rejected as identity hints and fall back to the normalized Bluetooth address.
 - The Android CI run that exposed the missing `ContextCompat` import is superseded by the import fix; latest compilation and tests remain pending confirmation.
+
+
+## BLE GATT receive-memory bounds (2026-11-17)
+
+- BLE inbound peer tracking is capped at 16 peers, and each peer's frame reassembler accepts at most two incomplete transfers at a time. With the 256 KiB packet limit, the configured worst-case incomplete payload budget is approximately 8 MiB, before object/array overhead.
+- The GATT callback now resolves the remote address under a permission-revocation guard and reuses that value for cleanup, reassembly and packet events. A revoked Bluetooth Connect permission causes the callback to drop the event safely.
+- Added a codec regression test proving the configured in-flight transfer limit evicts an older incomplete transfer while allowing the newer transfer to complete.
+- This bounds application-level reassembly memory; it does not authenticate the BLE link by itself. MeshLink's packet/session verification remains responsible for peer authenticity.
