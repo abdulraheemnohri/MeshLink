@@ -254,3 +254,10 @@ The app's release keystore must remain private and outside Git. A signed release
 - The transfer dashboard exposes the save action only for verified incoming files. No broad storage permission is requested.
 - This implementation currently requires Android 10 (API 29) or newer. Older Android versions return an unsupported result; a Storage Access Framework fallback remains future work.
 - The export action is not a file opener or share action; those remain separate follow-up work.
+
+### Verified download export hardening
+
+- The Android CI compile failure caused by the file-sharing screen's missing `onExport` callback is fixed.
+- Export integrity validation is extracted into `VerifiedFileIntegrity` and covered by JVM tests for exact hash/length, tampered content, length mismatch, missing files, and malformed hashes.
+- Export remains restricted to inbound `VERIFIED` transfers and Android 10+ MediaStore Downloads. Older Android versions still need a Storage Access Framework document-picker flow; do not treat this as completed until that UI path is implemented and tested.
+- The latest Android CI run is pending; compilation and unit-test success must be confirmed from GitHub Actions before calling this milestone green.
