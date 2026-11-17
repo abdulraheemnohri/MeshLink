@@ -23,6 +23,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.os.Build
 import android.os.ParcelUuid
 import com.example.core.crypto.LocalIdentityKeys
