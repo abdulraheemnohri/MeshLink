@@ -81,7 +81,7 @@ The following are separate concepts, not all independent radio protocols:
 - Wi-Fi Direct and Wi-Fi Aware: dedicated Android peer-to-peer paths.
 - BLE: dedicated GATT path.
 - NFC and QR: short-range / optical bootstrap, not continuous mesh data transports.
-- Bluetooth Classic RFCOMM is registered with a source-level authenticated connect workflow; Google Nearby Connections is not implemented.
+- Bluetooth Classic RFCOMM and Google Nearby Connections have registered source-level authenticated connect workflows. Nearby is an optional Google Play services adapter, not an independent radio.
 - Cellular / Internet / satellite: gateway paths, not direct offline phone-to-phone links.
 - LoRa / Zigbee / Thread / Wi-Fi HaLow: external-radio gateway integrations, not phone-native transports.
 
