@@ -475,7 +475,7 @@ class MeshRoutingEngine(
     suspend fun dispatchPacket(packet: MeshPacket): Boolean {
         val now = System.currentTimeMillis()
         if (packet.isExpired(now) || packet.hopLimit < 0) return false
-        rememberPacket(packet.messageId, packet.expiresAt, now)
+        packetReplayStore.rememberIfNew(packet.messageId, packet.expiresAt, now)
         val localIdentity = repository.ensureInitialized()
         if (packet.destinationId == localIdentity.deviceId) {
             repository.updateMessageStatus(packet.messageId, "DELIVERED", null, packet.hopCount)
