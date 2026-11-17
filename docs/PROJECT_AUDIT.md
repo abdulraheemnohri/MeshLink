@@ -1,0 +1,86 @@
+# MeshLink project audit
+
+Audit date: 2026-11-17  
+Repository reviewed: `abdulraheemnohri/MeshLink`  
+Branch reviewed: `main`
+
+## Executive summary
+
+MeshLink is a substantial Android/Jetpack Compose offline-messaging codebase with a Room-backed data layer, identity and cryptography modules, transport adapters, routing, file transfer, voice/location features, diagnostics and settings. The source tree contains many working components, but source presence is not proof of reliable multi-device operation. The project must remain labelled **development / device-validation required** until CI and the physical-device acceptance matrix pass.
+
+The Identity screen previously displayed QR codes and accepted pasted identity URIs, but did not open the camera to scan a QR. This audit adds an offline CameraX + ZXing scanner, permission-on-demand behavior, and QR identity import through the existing decoder.
+
+## Screens and navigation found in source
+
+- Home / dashboard
+- Discovery
+- Connections / trusted and blocked peers
+- Network topology map
+- Network bridge
+- Chats hub, private chat and group chat
+- File sharing and transfer queue
+- Voice push-to-talk
+- Location sharing
+- Device identity and QR display/import
+- Security and biometric lock
+- Routing and store-and-forward queue controls
+- Diagnostics and transport health
+- Settings
+- Emergency mode
+- Lock screen and onboarding
+
+## Existing source areas
+
+- Android app: Kotlin, Jetpack Compose, Material 3 and Navigation Compose
+- Persistence: Room database and DAOs
+- Identity/security: ECDSA P-256 signing, ECDH P-256 key agreement, packet verification and peer identity flows
+- Networking: Local LAN, BLE, Wi-Fi Direct, Wi-Fi Aware and Bluetooth Classic adapters are present in the app container
+- Routing: packet expiry, duplicate suppression, queueing and multi-path endpoint selection
+- File transfer: chunking, hashes, acknowledgements and resumable transfer code
+- Background: foreground mesh relay service
+- Device integrations: NFC intent bootstrap, QR identity exchange, microphone, location, biometrics and runtime permissions
+- Build: Gradle version catalog and GitHub Actions Android CI
+
+## QR scanner changes in this audit
+
+- Added CameraX camera2/core/lifecycle/view runtime dependencies.
+- Added optional camera hardware declaration and runtime CAMERA permission.
+- Added a QR-only ZXing analyzer using the Y plane from CameraX frames, including row/pixel-stride handling.
+- Scanner is opened explicitly from Identity; permission is requested only then.
+- Camera use case is bound while the scanner dialog is active and released when dismissed.
+- Decoded text is sent to the existing MeshViewModel identity URI decoder. A QR scan is not itself trust approval; the existing cryptographic validation path decides whether the payload is accepted.
+- No image or scan history is stored.
+
+## Gaps and release gates
+
+| Area | Current assessment | Required next action |
+|---|---|---|
+| Google Nearby Connections | Not integrated | Optional adapter with Play Services availability checks, authenticated MeshLink identity binding, payload framing and tests |
+| NFC | NDEF URI intent parsing/helper exists; end-to-end tag writer/reader handoff not verified | Validate actual tag read/write workflows on supported hardware; do not claim Android Beam |
+| Bluetooth Classic | RFCOMM adapter and authenticated handshake code exist | Two-device pairing, reconnect, bidirectional delivery and process-restart tests |
+| BLE / Wi-Fi Direct / Wi-Fi Aware / LAN | Source adapters exist | Two-device interoperability, large-frame, reconnect and screen-off tests per adapter |
+| Multi-hop routing | Routing/relay code exists | Three-device A-B-C relay test, hop-limit, duplicate and expiry tests |
+| File transfer | Chunking, ACK and resume code exists | Kill/restart tests, duplicate/reordered chunks, hash mismatch and two-device tests |
+| Session security | Identity signatures and ECDH code exist; static ECDH is not forward secrecy | Independent protocol review and ephemeral authenticated session-key exchange before production claims |
+| Background operation | Foreground relay service exists | Android 14–17 permission/notification, battery optimization and OEM process-kill tests |
+| Release signing | CI debug build can use an owner-provided stable debug key; production release key is not configured by this workflow | Owner must configure and protect a production signing key; never commit it |
+| Installation | Package ID must remain stable; debug certificate must match an existing installation | Use the exact same keystore to update; obtain ADB INSTALL_FAILED output for generic installer errors |
+
+## Build identity and update safety
+
+The current application ID remains `com.aistudio.meshlink.rx7kqm` to avoid silently changing the Android package identity. This audit increments the app to version `1.1`, versionCode `2`, so it can update a versionCode 1 installation **only if the signing certificate matches**. A version bump cannot solve a signing-key mismatch.
+
+## Validation checklist
+
+- [ ] GitHub Actions compiles the debug APK and runs all unit tests at the latest commit.
+- [ ] Scanner permission grant, deny, re-request and dismissal are tested.
+- [ ] QR scan imports a valid MeshLink identity and rejects malformed/unrelated QR content.
+- [ ] Two physical Android phones exchange an identity and message over each supported direct transport.
+- [ ] Three physical phones validate multi-hop and store-and-forward.
+- [ ] File transfer resumes after app process termination and validates final SHA-256.
+- [ ] Screen-off and battery behavior is recorded on supported Android versions.
+- [ ] Production signing key, upgrade path and release artifact are validated.
+
+## Scope note
+
+This audit does not claim that every possible radio or network type is a native Android transport. Cellular/internet/satellite require explicit gateways; LoRa/Zigbee/Thread/HaLow require external radio hardware. QR and NFC are bootstrap channels, not mesh data links. Nearby Connections is not currently integrated.
