@@ -30,7 +30,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -1270,7 +1269,9 @@ class MeshRoutingEngine(
         return false
     }
 
-    suspend fun flushStoreAndForwardQueue() = pendingFlushMutex.withLock {
+    suspend fun flushStoreAndForwardQueue() {
+        pendingFlushMutex.lock()
+        try {
         val pending = repository.getActivePendingPackets()
         if (pending.isEmpty() || activeEndpoints.isEmpty()) return
 
@@ -1314,6 +1315,9 @@ class MeshRoutingEngine(
                     summary = "Forwarded queued DTN packet ${packet.messageId.take(8)} after a route became available"
                 )
             }
+        }
+        } finally {
+            pendingFlushMutex.unlock()
         }
     }
 
