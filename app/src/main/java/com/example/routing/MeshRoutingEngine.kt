@@ -1278,6 +1278,17 @@ class MeshRoutingEngine(
                 continue
             }
 
+            val now = System.currentTimeMillis()
+            if (!PendingPacketRetryPolicy.shouldAttempt(
+                    attemptCount = entry.attemptCount,
+                    lastAttemptAt = entry.lastAttemptAt,
+                    now = now
+                )
+            ) continue
+
+            // Persist before sending. If the process dies mid-send, the next process
+            // observes the attempt and applies backoff instead of hammering a peer.
+            repository.recordPendingPacketAttempt(entry.messageId, now)
             val direct = activeEndpoints[packet.destinationId]
             val dispatched = dispatchPacket(packet)
             if (dispatched) {
