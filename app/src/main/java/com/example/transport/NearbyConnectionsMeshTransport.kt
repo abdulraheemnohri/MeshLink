@@ -131,6 +131,8 @@ class NearbyConnectionsMeshTransport(
             client.startDiscovery(SERVICE_ID, discovery, discovering).await()
             log("STARTED", "Nearby Connections advertising and discovery active")
         } catch (error: Exception) {
+            isRunning = false
+            runCatching { client.stopDiscovery().await() }
             runCatching { client.stopAdvertising().await() }
             throw error
         }
