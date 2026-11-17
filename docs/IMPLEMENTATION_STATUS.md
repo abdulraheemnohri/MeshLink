@@ -344,7 +344,7 @@ The app's release keystore must remain private and outside Git. A signed release
 - Added ignore rules for JKS, keystore, PKCS#12 and PFX signing material.
 - Added `docs/ANDROID_RELEASE.md` with required secrets, tag/version policy, signature verification and upgrade warnings.
 - The release workflow has not been exercised with production signing secrets or a real tag. No signed production APK is claimed.
-- Gradle Wrapper remains incomplete: only `gradle-wrapper.properties` exists; the official wrapper JAR and `gradlew` / `gradlew.bat` are absent. CI installs Gradle 9.3.1 directly. Add the official wrapper artifacts before claiming one-command local wrapper builds.
+- Generated and committed the official Gradle 9.3.1 wrapper JAR, `gradlew` and `gradlew.bat` from the CI runner. Android CI now verifies the wrapper and uses `./gradlew` for debug compilation and unit tests. A Windows local build can use `gradlew.bat`.
 
 
 ## Legacy source cleanup (2026-11-17)
