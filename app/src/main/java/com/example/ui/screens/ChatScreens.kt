@@ -431,11 +431,19 @@ fun PrivateChatScreen(
     onReact: (MessageEntity, String) -> Unit
 ) {
     var draft by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredMessages = remember(messages, searchQuery) {
+        if (searchQuery.isBlank()) messages else messages.filter {
+            it.body.contains(searchQuery.trim(), ignoreCase = true) ||
+                it.senderAlias.contains(searchQuery.trim(), ignoreCase = true) ||
+                it.deliveryStatus.contains(searchQuery.trim(), ignoreCase = true)
+        }
+    }
     var selectedStrategy by remember { mutableStateOf(RoutingStrategy.AUTONOMOUS) }
     var ttlHours by remember { mutableIntStateOf(24) }
     val messageListState = rememberLazyListState()
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) messageListState.animateScrollToItem(messages.lastIndex)
+    LaunchedEffect(filteredMessages.size, searchQuery) {
+        if (filteredMessages.isNotEmpty()) messageListState.animateScrollToItem(filteredMessages.lastIndex)
     }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -509,6 +517,17 @@ fun PrivateChatScreen(
             }
 
             Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it.take(120) },
+                modifier = Modifier.fillMaxWidth().testTag("private_chat_search"),
+                placeholder = { Text("Search messages, sender or status") },
+                singleLine = true,
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) TextButton(onClick = { searchQuery = "" }) { Text("Clear") }
+                }
+            )
+            Spacer(Modifier.height(6.dp))
 
             LazyColumn(
                 state = messageListState,
@@ -518,7 +537,7 @@ fun PrivateChatScreen(
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (messages.isEmpty()) {
+                if (filteredMessages.isEmpty()) {
                     item {
                         Box(
                             modifier = Modifier
@@ -527,14 +546,14 @@ fun PrivateChatScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Messages are signed & end-to-end encrypted. Offline messages remain queued in Store & Forward until delivery.",
+                                text = if (searchQuery.isBlank()) "Messages are signed & end-to-end encrypted. Offline messages remain queued in Store & Forward until delivery." else "No messages match ‘$searchQuery’. Clear search to see the full conversation.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 } else {
-                    items(messages, key = { it.messageId }) { msg ->
+                    items(filteredMessages, key = { it.messageId }) { msg ->
                         MessageBubble(msg = msg, onReact = { emoji -> onReact(msg, emoji) })
                     }
                 }
@@ -598,11 +617,19 @@ fun GroupChatScreen(
 ) {
     val context = LocalContext.current
     var draft by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredMessages = remember(messages, searchQuery) {
+        if (searchQuery.isBlank()) messages else messages.filter {
+            it.body.contains(searchQuery.trim(), ignoreCase = true) ||
+                it.senderAlias.contains(searchQuery.trim(), ignoreCase = true) ||
+                it.deliveryStatus.contains(searchQuery.trim(), ignoreCase = true)
+        }
+    }
     var showInviteDialog by remember { mutableStateOf(false) }
     var showMembersDialog by remember { mutableStateOf(false) }
     val messageListState = rememberLazyListState()
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) messageListState.animateScrollToItem(messages.lastIndex)
+    LaunchedEffect(filteredMessages.size, searchQuery) {
+        if (filteredMessages.isNotEmpty()) messageListState.animateScrollToItem(filteredMessages.lastIndex)
     }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -654,6 +681,17 @@ fun GroupChatScreen(
             }
 
             Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it.take(120) },
+                modifier = Modifier.fillMaxWidth().testTag("group_chat_search"),
+                placeholder = { Text("Search messages, sender or status") },
+                singleLine = true,
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) TextButton(onClick = { searchQuery = "" }) { Text("Clear") }
+                }
+            )
+            Spacer(Modifier.height(6.dp))
 
             LazyColumn(
                 state = messageListState,
@@ -663,7 +701,7 @@ fun GroupChatScreen(
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages, key = { it.messageId }) { msg ->
+                items(filteredMessages, key = { it.messageId }) { msg ->
                     MessageBubble(msg = msg, onReact = { emoji -> onReact(msg, emoji) })
                 }
             }
@@ -848,7 +886,16 @@ private fun MessageBubble(
                 )
             }
             Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("MeshLink message", msg.body))
+                    },
+                    modifier = Modifier.size(30.dp).testTag("copy_message_${msg.messageId}")
+                ) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy message", modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 listOf("👍", "🔥", "✅", "🚨").forEach { emoji ->
                     val active = msg.reactionsCsv.split(",").contains(emoji)
                     Text(
