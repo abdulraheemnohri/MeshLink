@@ -883,7 +883,8 @@ fun SettingsScreen(
                         TransportType.HOTSPOT to "Hotspot (LAN adapter path)",
                         TransportType.NFC to "NFC identity handoff (not a data transport)",
                         TransportType.QR to "QR identity handoff (not a data transport)",
-                        TransportType.BLUETOOTH_CLASSIC to "Bluetooth Classic RFCOMM (bonded peers)"
+                        TransportType.BLUETOOTH_CLASSIC to "Bluetooth Classic RFCOMM (bonded peers)",
+                        TransportType.NEARBY_CONNECTIONS to "Google Nearby Connections"
                     ).toMap()
                     val orderedTransportTypes = (transportPolicy.preferred + transportLabels.keys).distinct()
                         .filter { it in transportLabels }
