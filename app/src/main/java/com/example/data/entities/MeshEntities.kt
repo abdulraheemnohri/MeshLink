@@ -62,7 +62,7 @@ data class GroupMemberEntity(
     val joinedAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "group_key_updates")
+@Entity(tableName = "group_key_updates", indices = [androidx.room.Index(value = ["groupId"])])
 data class GroupKeyUpdateEntity(
     @androidx.room.PrimaryKey val packetId: String,
     val groupId: String,
