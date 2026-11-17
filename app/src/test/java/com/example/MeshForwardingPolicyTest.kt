@@ -53,6 +53,15 @@ class MeshForwardingPolicyTest {
     }
 
     @Test
+    fun invalidRouteMetadataIsRejected() {
+        assertFalse(MeshForwardingPolicy.hasValidRouteMetadata(packet(hopLimit = 33)))
+        assertFalse(MeshForwardingPolicy.hasValidRouteMetadata(packet(hopCount = 33)))
+        assertFalse(MeshForwardingPolicy.hasValidRouteMetadata(packet(visited = List(33) { "peer_$it" })))
+        assertFalse(MeshForwardingPolicy.hasValidRouteMetadata(packet(visited = listOf("A", "B", "B"))))
+        assertTrue(MeshForwardingPolicy.hasValidRouteMetadata(packet(hopLimit = 32, hopCount = 32)))
+    }
+
+    @Test
     fun nextHopMustBeUnvisitedAndNotThePreviousSender() {
         val candidate = packet(visited = listOf("A", "B"))
         assertTrue(MeshForwardingPolicy.canForwardToNextHop(candidate, "C"))
