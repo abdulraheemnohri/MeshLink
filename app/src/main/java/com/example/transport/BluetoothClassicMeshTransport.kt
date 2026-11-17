@@ -156,7 +156,6 @@ class BluetoothClassicMeshTransport(
         }
     }
 
-    @SuppressLint("MissingPermission")
     override suspend fun connect(endpoint: DiscoveredEndpoint): Boolean = withContext(Dispatchers.IO) {
         if (!isRunning || !HardwareCapabilities.hasBluetoothPermissions(context)) return@withContext false
         val existing = sockets[endpoint.deviceId]?.takeIf { it.isConnected }
