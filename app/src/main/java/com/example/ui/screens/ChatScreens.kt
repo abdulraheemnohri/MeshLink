@@ -849,6 +849,13 @@ private fun MessageBubble(
         msg.isOutgoing -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
+    val deliveryColor = when (msg.deliveryStatus.uppercase(Locale.ROOT)) {
+        "DELIVERED", "VERIFIED" -> MeshEmerald
+        "FAILED", "EXPIRED" -> MeshCrimson
+        "QUEUED", "PENDING" -> MeshAmber
+        "RELAYED", "SPRAYED", "TRANSFERRING" -> NeonCyan
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -883,7 +890,7 @@ private fun MessageBubble(
                 Text(
                     text = "$timeStr • ${msg.deliveryStatus}${if (msg.hopCount > 0) " (${msg.hopCount}h)" else ""}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = deliveryColor
                 )
             }
             Spacer(Modifier.height(4.dp))
