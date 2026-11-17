@@ -7,7 +7,7 @@ The current debug build uses:
 - Application ID: `com.aistudio.meshlink.rx7kqm`
 - Minimum Android version: Android 7.0 (API 24)
 - Target SDK: API 36
-- Version: `1.0 (versionCode 1)`
+- Version: `1.1 (versionCode 2)`
 - APK type: single debug APK (`app-debug.apk`)
 
 The application ID is intentionally documented. Do not change it casually: changing it makes Android treat the build as a different app and it will not update an existing installation.
