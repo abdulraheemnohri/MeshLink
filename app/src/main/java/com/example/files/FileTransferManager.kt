@@ -144,14 +144,7 @@ class FileTransferManager(
         if (transfer.isOutgoing || transfer.status != "VERIFIED") return null
         val source = File(transfer.localUriOrPath)
         if (!source.isFile || source.length() != transfer.totalBytes) return null
-        val digest = MessageDigest.getInstance("SHA-256")
-        source.inputStream().use { input ->
-            val buffer = ByteArray(16 * 1024)
-            var count: Int
-            while (input.read(buffer).also { count = it } != -1) digest.update(buffer, 0, count)
-        }
-        val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
-        if (!actualHash.equals(transfer.sha256, true)) {
+        if (!VerifiedFileIntegrity.matches(source, transfer.totalBytes, transfer.sha256)) {
             repository.logSecurityEvent(eventType = "EXPORT_HASH_FAIL", peerId = transfer.peerId, severity = "ALERT", summary = "Blocked export because verified file changed on disk: $transferId")
             return null
         }
