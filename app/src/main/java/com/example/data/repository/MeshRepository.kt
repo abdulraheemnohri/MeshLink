@@ -205,7 +205,7 @@ class MeshRepository(
             agreementPublicKey = payload.agreementPublicKeyB64,
             fingerprint = payload.fingerprint,
             verifiedByQr = existing?.verifiedByQr ?: false,
-            blocked = false,
+            blocked = existing?.blocked ?: false,
             isConnected = existing?.isConnected ?: false,
             activeTransport = existing?.activeTransport ?: "QR",
             signalStrengthDbm = existing?.signalStrengthDbm ?: -60,
