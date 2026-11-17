@@ -35,7 +35,7 @@ This plan is the release gate for transport, security, file-transfer, and group-
 
 ## Nearby Connections status
 
-Google Nearby Connections is not yet registered as a MeshTransport adapter. It must be implemented as an optional adapter with explicit Play services availability checks, lifecycle-safe advertising/discovery, authenticated connection bootstrap, payload framing, and fallback to LAN/Bluetooth transports. Do not report Nearby as supported until ML-18 is passed on real devices.
+Google Nearby Connections is registered as an optional MeshTransport adapter. The source includes Play services availability checks, P2P_CLUSTER advertising/discovery, signed identity bootstrap with nonce proof, byte payload framing, and explicit relay lifecycle control. The adapter is implemented in source but remains unverified on physical devices; do not describe it as device-validated until ML-18 passes.
 
 | ID | Scenario | Pass criteria |
 |---|---|---|
