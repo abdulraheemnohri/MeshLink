@@ -139,6 +139,7 @@ class FileTransferManager(
 
     /** Export a received file only after re-checking its persisted size and SHA-256. */
     suspend fun exportVerifiedDownload(transferId: String): Uri? {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return null
         val transfer = repository.getFileTransferById(transferId) ?: return null
         if (transfer.isOutgoing || transfer.status != "VERIFIED") return null
         val source = File(transfer.localUriOrPath)
