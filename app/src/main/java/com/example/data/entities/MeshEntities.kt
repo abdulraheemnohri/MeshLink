@@ -62,6 +62,17 @@ data class GroupMemberEntity(
     val joinedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "group_key_updates")
+data class GroupKeyUpdateEntity(
+    @androidx.room.PrimaryKey val packetId: String,
+    val groupId: String,
+    val epoch: Int,
+    val peerId: String,
+    val status: String = "PENDING",
+    val updatedAt: Long = System.currentTimeMillis(),
+    val acknowledgedAt: Long? = null
+)
+
 @Entity(tableName = "emergency_broadcasts")
 data class EmergencyBroadcastEntity(
     @PrimaryKey val messageId: String,
