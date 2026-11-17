@@ -9,6 +9,8 @@ enum class PacketType {
     HELLO,
     PEER_DISCOVERY,
     PEER_HANDSHAKE,
+    SESSION_OFFER,
+    SESSION_RESPONSE,
     MESSAGE,
     GROUP_MESSAGE,
     GROUP_INVITE,
