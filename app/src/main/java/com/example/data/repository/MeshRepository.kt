@@ -12,6 +12,7 @@ import com.example.data.entities.FileTransferEntity
 import com.example.data.entities.GroupEntity
 import com.example.data.entities.GroupMemberEntity
 import com.example.data.entities.GroupKeyUpdateEntity
+import com.example.data.entities.GroupRoleUpdateEntity
 import com.example.data.entities.MessageEntity
 import com.example.data.entities.NetworkEventEntity
 import com.example.data.entities.PeerEntity
@@ -439,7 +440,7 @@ class MeshRepository(
         groupDao.removeMember(groupId, peerId)
     }
 
-    suspend fun updateGroupMemberRole(groupId: String, peerId: String, role: String) {
+    suspend fun updateGroupMemberRole(groupId: String, peerId: String, role: String, issuedAt: Long = System.currentTimeMillis()) {
         val local = ensureInitialized()
         require(groupDao.getMember(groupId, local.deviceId)?.role == "ADMIN") {
             "Only a group admin can update member roles"
@@ -450,7 +451,7 @@ class MeshRepository(
         if (target.role == "ADMIN" && role != "ADMIN") {
             require(groupDao.countAdmins(groupId) > 1) { "Cannot demote the last group admin" }
         }
-        groupDao.updateMemberRole(groupId, peerId, role, System.currentTimeMillis())
+        groupDao.updateMemberRole(groupId, peerId, role, issuedAt)
         logSecurityEvent(
             eventType = "GROUP_ROLE_CHANGED_LOCAL",
             peerId = peerId,
@@ -594,8 +595,48 @@ class MeshRepository(
     suspend fun getUnresolvedGroupKeyUpdates(groupId: String): List<GroupKeyUpdateEntity> =
         groupDao.getUnresolvedKeyUpdates(groupId)
 
+    suspend fun recordGroupRoleUpdate(update: GroupRoleUpdateEntity) {
+        groupDao.upsertRoleUpdate(update)
+    }
+
+    suspend fun markGroupRoleUpdateAcknowledged(packetId: String, acknowledgingPeerId: String): Boolean {
+        val record = groupDao.getRoleUpdateByPacketId(packetId) ?: return false
+        if (record.peerId != acknowledgingPeerId) {
+            logSecurityEvent(
+                eventType = "GROUP_ROLE_ACK_SPOOF_REJECTED",
+                peerId = acknowledgingPeerId,
+                severity = "WARN",
+                summary = "Ignored a group role acknowledgement from a peer other than the intended recipient"
+            )
+            return false
+        }
+        val now = System.currentTimeMillis()
+        groupDao.updateRoleUpdateStatus(packetId, "ACKED", now, now)
+        logSecurityEvent(
+            eventType = "GROUP_ROLE_UPDATE_ACKED",
+            peerId = record.peerId,
+            summary = "Intended group member acknowledged the role update"
+        )
+        return true
+    }
+
+    suspend fun markGroupRoleUpdateSuperseded(packetId: String) {
+        groupDao.updateRoleUpdateStatus(packetId, "SUPERSEDED", System.currentTimeMillis(), null)
+    }
+
+    suspend fun supersedeOlderGroupRoleUpdates(groupId: String, epoch: Int) {
+        groupDao.supersedeOlderRoleUpdates(groupId, epoch, System.currentTimeMillis())
+    }
+
+    suspend fun getUnresolvedGroupRoleUpdates(groupId: String): List<GroupRoleUpdateEntity> =
+        groupDao.getUnresolvedRoleUpdates(groupId)
+
+    suspend fun getUnresolvedGroupRoleUpdatesForPeer(peerId: String): List<GroupRoleUpdateEntity> =
+        groupDao.getUnresolvedRoleUpdatesForPeer(peerId)
+
     suspend fun hasUnacknowledgedGroupKeyUpdates(groupId: String): Boolean =
-        groupDao.countUnacknowledgedKeyUpdates(groupId) > 0
+        groupDao.countUnacknowledgedKeyUpdates(groupId) > 0 ||
+            groupDao.countUnacknowledgedRoleUpdates(groupId) > 0
 
     suspend fun getGroupMembersOnce(groupId: String): List<GroupMemberEntity> = groupDao.getMembersOnce(groupId)
 
@@ -606,7 +647,10 @@ class MeshRepository(
         val group = groupDao.getGroupById(groupId) ?: return@withTransaction false
         if (group.keyEpoch != epoch || groupDao.getMember(groupId, senderId)?.role != "ADMIN") return@withTransaction false
         val target = groupDao.getMember(groupId, targetPeerId) ?: return@withTransaction false
-        if (issuedAt <= target.roleUpdatedAt) return@withTransaction false
+        if (issuedAt < target.roleUpdatedAt) return@withTransaction false
+        // An exact duplicate is idempotently accepted so the receiver can ACK a retry
+        // when the original delivery acknowledgement was lost.
+        if (issuedAt == target.roleUpdatedAt) return@withTransaction target.role == role
         if (target.role == "ADMIN" && role == "MEMBER" && groupDao.countAdmins(groupId) <= 1) return@withTransaction false
         groupDao.updateMemberRole(groupId, targetPeerId, role, issuedAt)
         logSecurityEvent(eventType = "GROUP_ROLE_UPDATE_APPLIED", peerId = senderId, summary = "Applied authenticated group member role update")
