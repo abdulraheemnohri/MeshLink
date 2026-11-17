@@ -4,6 +4,7 @@ plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
+  alias(libs.plugins.androidx.room)
   alias(libs.plugins.secrets)
   alias(libs.plugins.google.services)
 }
@@ -80,9 +81,9 @@ secrets {
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
-// Keep Room schema snapshots alongside the database implementation for migration review.
-ksp {
-  arg("room.schemaLocation", "$projectDir/schemas")
+// The Room Gradle plugin wires schema export consistently for KSP and KAPT variants.
+room {
+  schemaDirectory("$projectDir/schemas")
 }
 
 // Some unused dependencies are commented out below instead of being removed.
