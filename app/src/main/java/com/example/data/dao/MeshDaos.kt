@@ -124,6 +124,9 @@ interface GroupDao {
     @Query("UPDATE group_role_updates SET status = 'SUPERSEDED', updatedAt = :now WHERE groupId = :groupId AND epoch < :epoch AND status NOT IN ('ACKED', 'SUPERSEDED')")
     suspend fun supersedeOlderRoleUpdates(groupId: String, epoch: Int, now: Long)
 
+    @Query("UPDATE group_role_updates SET status = 'SUPERSEDED', updatedAt = :now WHERE groupId = :groupId AND targetPeerId = :targetPeerId AND issuedAt < :issuedAt AND status NOT IN ('ACKED', 'SUPERSEDED')")
+    suspend fun supersedeOlderRoleUpdatesForTarget(groupId: String, targetPeerId: String, issuedAt: Long, now: Long)
+
     @Query("SELECT COUNT(*) FROM group_role_updates WHERE groupId = :groupId AND status NOT IN ('ACKED', 'SUPERSEDED')")
     suspend fun countUnacknowledgedRoleUpdates(groupId: String): Int
 }
