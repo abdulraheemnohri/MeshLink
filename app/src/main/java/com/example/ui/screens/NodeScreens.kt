@@ -58,7 +58,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -107,6 +111,7 @@ fun IdentityScreen(
     onImportPeerUri: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var aliasDraft by remember(identity?.alias) { mutableStateOf(identity?.alias ?: "") }
     var showImportDialog by remember { mutableStateOf(false) }
     var showQrScanner by remember { mutableStateOf(false) }
@@ -114,19 +119,41 @@ fun IdentityScreen(
     var qrActionStatus by remember { mutableStateOf("") }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            val decoded = runCatching {
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    val bitmap = BitmapFactory.decodeStream(input) ?: error("The selected image could not be decoded")
-                    val pixels = IntArray(bitmap.width * bitmap.height)
-                    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-                    val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
-                    MultiFormatReader().decode(BinaryBitmap(HybridBinarizer(source))).text
-                } ?: error("Could not open the selected image")
+            scope.launch {
+                val decoded = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            BitmapFactory.decodeStream(input, null, bounds)
+                        } ?: error("Could not open the selected image")
+                        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                            error("The selected image has invalid dimensions")
+                        }
+                        var sampleSize = 1
+                        while (maxOf(bounds.outWidth / sampleSize, bounds.outHeight / sampleSize) > 2048) {
+                            sampleSize *= 2
+                        }
+                        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+                        val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
+                            BitmapFactory.decodeStream(input, null, options)
+                        } ?: error("The selected image could not be decoded")
+                        try {
+                            val pixels = IntArray(bitmap.width * bitmap.height)
+                            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                            val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
+                            MultiFormatReader().decode(BinaryBitmap(HybridBinarizer(source))).text
+                        } finally {
+                            bitmap.recycle()
+                        }
+                    }
+                }
+                decoded.onSuccess { value ->
+                    if (value.startsWith("meshlink://peer?")) onImportPeerUri(value)
+                    else qrActionStatus = "QR found, but it is not a MeshLink peer identity QR."
+                }.onFailure {
+                    qrActionStatus = "Could not read a QR code from that image: ${it.message ?: "unsupported image"}"
+                }
             }
-            decoded.onSuccess { value ->
-                if (value.startsWith("meshlink://peer?")) onImportPeerUri(value)
-                else qrActionStatus = "QR found, but it is not a MeshLink peer identity QR."
-            }.onFailure { qrActionStatus = "Could not read a QR code from that image: ${it.message ?: "unsupported image"}" }
         }
     }
 
