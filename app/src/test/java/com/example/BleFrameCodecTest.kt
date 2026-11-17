@@ -79,9 +79,11 @@ class BleFrameCodecTest {
 
         assertNull(reassembler.accept(first[0]))
         assertNull(reassembler.accept(second[0]))
-        // The first transfer was evicted to keep the per-peer in-flight budget bounded.
-        assertNull(reassembler.accept(first[1]))
+        // The second transfer evicted the first; finish the retained transfer before
+        // sending any more first-transfer frames (which would start it again).
         assertArrayEquals(secondPayload, reassembler.accept(second[1]))
+        // A late fragment from the evicted transfer is only an incomplete new transfer.
+        assertNull(reassembler.accept(first[1]))
     }
 
     @Test
