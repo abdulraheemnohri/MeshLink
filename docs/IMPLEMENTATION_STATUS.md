@@ -38,6 +38,14 @@ This document separates implemented source code from capabilities that have been
 
 These entries describe source changes only. They do not mean the corresponding radio path has passed a physical-device acceptance test. Use docs/MULTI_DEVICE_ACCEPTANCE_TESTS.md to record the two-device and three-device acceptance runs.
 
+## Diagnostics export and build regression coverage
+
+- Diagnostics CSV serialization is isolated in a platform-independent helper and unit-tested for empty exports, quoting, commas, embedded quotes, multiline summaries and row ordering.
+- The export action still serializes only the event records currently visible after filtering; it does not include chat bodies, transferred file contents, credentials or cryptographic keys.
+- The identity QR screen owns its own remembered list scroll state; Settings owns a separate scroll state for section navigation.
+- Settings explicitly opts into the experimental Compose FlowRow API used by its category chips.
+- The source fixes above address the compile errors reported by the Android CI run for commit 1075f1f; the follow-up CI run is the release gate.
+
 ## Network selection status
 
 The routing engine prefers the discovered endpoint transport and can attempt other registered transports as fallback. The persisted Automatic / Prefer / Only transport policy, per-transport enable/disable controls, per-peer endpoint paths and strict no-fallback behavior are implemented; see NETWORKING_MATRIX.md. See [NETWORKING_MATRIX.md](NETWORKING_MATRIX.md) for accurate support boundaries.
