@@ -89,4 +89,4 @@ Review every route on a compact phone and a wide screen, with both light and dar
 - Every topology node can be selected from a labelled button list as well as the canvas, so inspection does not depend on touch precision alone.
 - Selected peer details include only persisted identity and route data; missing route records are presented as missing rather than drawing a speculative connection.
 - Diagnostics search/filter controls have stable test tags, and the event list has a dedicated no-results state.
-- Verify with TalkBack, large font/display scaling and reduced-motion system settings on a physical Android device. The radar pulse remains decorative and must not be interpreted as live radio activity.
+- The topology radar guide is static to avoid continuous decorative motion and to prevent implying live radio ranging. Verify with TalkBack and large font/display scaling on a physical Android device.
